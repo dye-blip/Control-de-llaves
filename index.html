@@ -309,25 +309,44 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // --- CONFIGURACIÓN E INITIALIZACIÓN DE FIREBASE ---
+        // ====================================================================
+        // CONFIGURACIÓN DE TU FIREBASE PERSONAL
+        // ====================================================================
+        // Reemplaza los siguientes datos con las credenciales que copiaste de tu Consola de Firebase.
+        const miConfiguracionPersonalDeFirebase = {
+            apiKey: "TU_API_KEY_AQUÍ",
+            authDomain: "TU_PROJECT_ID.firebaseapp.com",
+            projectId: "TU_PROJECT_ID",
+            storageBucket: "TU_PROJECT_ID.appspot.com",
+            messagingSenderId: "TU_SENDER_ID",
+            appId: "TU_APP_ID"
+        };
+        // ====================================================================
+
         let db = null;
         let auth = null;
         let useFirebase = false;
 
-        // Recuperar ID de la aplicación y configuraciones del entorno global
+        // Recuperar ID de la aplicación y configuraciones del entorno de pruebas
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'control-llaves-app';
         let firebaseConfig = null;
 
+        // Prioridad: Usar configuración inyectada por el entorno, sino usar tu configuración personal
         if (typeof __firebase_config !== 'undefined' && __firebase_config) {
             try {
                 firebaseConfig = JSON.parse(__firebase_config);
                 useFirebase = true;
             } catch (e) {
-                console.error("Error parsing firebase config, falling back to offline", e);
+                console.error("Error cargando config automática, intentando manual...", e);
             }
         }
 
-        // Referencias de colecciones (con rutas estrictas de la regla 1)
+        if (!useFirebase && miConfiguracionPersonalDeFirebase.apiKey !== "TU_API_KEY_AQUÍ") {
+            firebaseConfig = miConfiguracionPersonalDeFirebase;
+            useFirebase = true;
+        }
+
+        // Referencias de colecciones (Regla Estricta 1 de rutas)
         let keyTypesColRef = null;
         let recordsColRef = null;
 
@@ -368,7 +387,7 @@
         }
 
         // --- SEMILLA DE BASE DE DATOS INICIAL ---
-        // Se ejecuta solo la primera vez para que no empiece la base de datos vacía
+        // Se ejecuta automáticamente la primera vez para asegurar datos demo iniciales
         async function seedFirebaseDatabase() {
             if (!useFirebase || !auth.currentUser) return;
 
@@ -416,20 +435,19 @@
         // --- ESCUCHADORES EN TIEMPO REAL (REALTIME SYNC) ---
         function setupRealtimeListeners() {
             if (!useFirebase || !auth.currentUser) {
-                // Modo Fallback LocalStorage si no hay Firebase configurado
                 loadLocalBackup();
                 renderAll();
                 return;
             }
 
-            // Listener de Tipos de Llaves con Callback de Error obligatorio
+            // Listener de Tipos de Llaves con Callback de Error
             onSnapshot(keyTypesColRef, (snapshot) => {
                 keyTypes = [];
                 snapshot.forEach(doc => {
                     keyTypes.push({ id: doc.id, ...doc.data() });
                 });
 
-                // Si está vacío y nunca se ha sembrado, sembramos de forma asíncrona
+                // Si está vacío y nunca se ha sembrado, inyectamos la semilla demo
                 if (keyTypes.length === 0 && !localStorage.getItem(`controlLlaves_seeded_${appId}`)) {
                     seedFirebaseDatabase();
                 } else {
@@ -439,7 +457,7 @@
                 console.error("Firestore onSnapshot keys error: ", error);
             });
 
-            // Listener de Préstamos con Callback de Error obligatorio
+            // Listener de Préstamos con Callback de Error
             onSnapshot(recordsColRef, (snapshot) => {
                 records = [];
                 snapshot.forEach(doc => {
@@ -451,7 +469,7 @@
             });
         }
 
-        // Respaldos locales antiguos si no hay conexión
+        // Respaldos locales por si no hay conexión o no has puesto tus credenciales personales aún
         function loadLocalBackup() {
             const savedKeyTypes = localStorage.getItem('controlLlaves_keyTypes');
             const savedRecords = localStorage.getItem('controlLlaves_records');
@@ -482,7 +500,7 @@
             }
         }
 
-        // --- FUNCIONES DE UTILIDAD (SIN CAMBIOS VISUALES) ---
+        // --- STREAMING_CHUNK: Implementando cálculos de tiempo y estados... ---
         function calculateDays(dateString) {
             const date = new Date(dateString);
             const today = new Date();
@@ -627,6 +645,7 @@
             }
         }
 
+        // --- STREAMING_CHUNK: Creando el manejador de navegación de pestañas... ---
         // --- CONTROL DE UI ---
         function switchTab(tabName) {
             document.getElementById('view-pendientes').classList.add('hidden');
@@ -685,7 +704,8 @@
             openModal('actionModal');
         }
 
-        // --- RENDERIZADO DE VISTAS (IDÉNTICO EN ESTILO) ---
+        // --- STREAMING_CHUNK: Renderizando listas y tarjetas... ---
+        // --- RENDERIZADO DE VISTAS ---
         function renderPendientes() {
             const container = document.getElementById('pendientes-list');
             container.innerHTML = '';
@@ -887,6 +907,7 @@
             });
         }
 
+        // --- STREAMING_CHUNK: Conectando guardado y eliminación con Firestore en la nube... ---
         // Guardado de llaves integrado a Firestore
         async function saveNewKey() {
             const name = document.getElementById('newKeyName').value.trim();
@@ -1104,6 +1125,7 @@
             pendingDeleteKeyId = null;
         }
 
+        // --- STREAMING_CHUNK: Integrando funciones inteligentes de Gemini AI... ---
         // --- INTEGRACIÓN CON GEMINI API ---
         async function callGeminiAPI(prompt, systemPrompt = "") {
             const apiKey = ""; // API Key proveída por el entorno Canvas
@@ -1239,8 +1261,6 @@
         }
 
         // --- PUBLICAR MÉTODOS AL ÁMBITO GLOBAL ---
-        // Al usar script type="module", es indispensable exportar las funciones
-        // al objeto "window" para que los "onclick" del HTML puedan encontrarlas.
         window.switchTab = switchTab;
         window.openModal = openModal;
         window.closeModal = closeModal;
@@ -1262,8 +1282,14 @@
 
         // --- INICIALIZACIÓN ---
         window.onload = async () => {
-            await authenticateFirebase();
-            setupRealtimeListeners();
+            const user = await authenticateFirebase();
+            if (user) {
+                setupRealtimeListeners();
+            } else {
+                // Si no hay configuración aún, inicializar con el LocalStorage para que nunca falle
+                loadLocalBackup();
+                renderAll();
+            }
         };
     </script>
 </body>
