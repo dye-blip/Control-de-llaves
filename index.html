@@ -217,7 +217,7 @@
         </div>
     </div>
 
-    <!-- MODAL: Prestar Llave -->
+    <!-- MODAL: Prestar Llave (NUEVO MODAL QUE FALTABA) -->
     <div id="lendKeyModal" class="fixed inset-0 bg-black/50 z-50 hidden flex flex-col justify-end sm:justify-center items-center p-4">
         <div class="bg-white w-full sm:w-[32rem] max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl transform transition-transform">
             <div class="flex justify-between items-center mb-6">
@@ -309,68 +309,52 @@
         import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // ====================================================================
-        // CONFIGURACIÓN DE TU FIREBASE PERSONAL (Cargada desde tu consola)
-        // ====================================================================
         const miConfiguracionPersonalDeFirebase = {
-            apiKey: "AIzaSyBTcu3v7dVyvm29CvKSdTYmUtqfP7bCaN4",
+            apiKey: "AIzaSyBTCU3v7dVyvm29CvKSdTYmUtqfP7bCaN4",
             authDomain: "control-llaves-14396.firebaseapp.com",
             projectId: "control-llaves-14396",
             storageBucket: "control-llaves-14396.firebasestorage.app",
             messagingSenderId: "623552696309",
             appId: "1:623552696309:web:def6e40ab8413e61cadabc"
         };
-        // ====================================================================
 
         let db = null;
         let auth = null;
         let useFirebase = false;
 
-        // Recuperar ID de la aplicación y configuraciones del entorno de pruebas
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'control-llaves-app';
         let firebaseConfig = null;
 
-        // Prioridad: Usar configuración inyectada por el entorno, sino usar tu configuración personal
         if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-            try {
-                firebaseConfig = JSON.parse(__firebase_config);
-                useFirebase = true;
-            } catch (e) {
-                console.error("Error cargando config automática, intentando manual...", e);
-            }
+            try { firebaseConfig = JSON.parse(__firebase_config); useFirebase = true; }
+            catch (e) { console.error("Error cargando config automática", e); }
         }
 
-        if (!useFirebase && miConfiguracionPersonalDeFirebase.apiKey !== "TU_API_KEY_AQUÍ") {
+        if (!useFirebase) {
             firebaseConfig = miConfiguracionPersonalDeFirebase;
             useFirebase = true;
         }
 
-        // Referencias de colecciones (Regla Estricta 1 de rutas)
         let keyTypesColRef = null;
         let recordsColRef = null;
 
-        // --- ESTADO LOCAL EN MEMORIA (Sincronizado) ---
         let keyTypes = [];
         let records = [];
         const iconOptions = ['ph-car', 'ph-jeep', 'ph-tractor', 'ph-house', 'ph-lock-key', 'ph-truck', 'ph-motorcycle', 'ph-star'];
         let selectedIcon = 'ph-car';
-        let uploadedImages = []; 
+        let uploadedImages = [];
         let selectedImageToLend = null;
         let pendingActionId = null;
         let pendingDeleteKeyId = null;
 
-        // --- FLUJO DE AUTENTICACIÓN ---
         async function authenticateFirebase() {
             if (!useFirebase) return null;
             try {
                 const app = initializeApp(firebaseConfig);
                 db = getFirestore(app);
                 auth = getAuth(app);
-
-                // Regla 1: Rutas de colecciones públicas seguras
-                keyTypesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'keyTypes');
-                recordsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'records');
-
+                keyTypesColRef = collection(db, 'controlLlaves', 'datos', 'keyTypes');
+                recordsColRef = collection(db, 'controlLlaves', 'datos', 'records');
                 let userCredential;
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                     userCredential = await signInWithCustomToken(auth, __initial_auth_token);
@@ -380,95 +364,50 @@
                 return userCredential.user;
             } catch (err) {
                 console.error("Firebase Auth/Init Error: ", err);
-                useFirebase = false; // Fallback elegante a modo local si falla la conexión
+                useFirebase = false;
                 return null;
             }
         }
 
-        // --- SEMILLA DE BASE DE DATOS INICIAL ---
-        // Se ejecuta automáticamente la primera vez para asegurar datos demo iniciales
         async function seedFirebaseDatabase() {
             if (!useFirebase || !auth.currentUser) return;
-
+            const now = new Date();
             const defaultKeys = [
                 { id: 'k1', name: 'Toyota (Camionetas)', total: 11, icon: 'ph-car', images: [] },
                 { id: 'k2', name: 'Hangcha (Montacargas)', total: 5, icon: 'ph-tractor', images: [] },
                 { id: 'k3', name: 'Oficina Principal', total: 2, icon: 'ph-house', images: [] }
             ];
-
             const defaultRecords = [
-                { 
-                    id: 'r1', keyTypeId: 'k1', borrower: 'Juan Pérez', purpose: 'Entregar a cliente', 
-                    checkoutDate: new Date().toISOString(), returnDate: null, status: 'pending', selectedImage: null
-                },
-                { 
-                    id: 'r2', keyTypeId: 'k2', borrower: 'Taller Mecánico', purpose: 'Mantenimiento', 
-                    checkoutDate: new Date(Date.now() - 86400000).toISOString(), returnDate: null, status: 'pending', selectedImage: null
-                },
-                { 
-                    id: 'r3', keyTypeId: 'k1', borrower: 'Carlos López', purpose: 'Prueba de manejo', 
-                    checkoutDate: new Date(Date.now() - 345600000).toISOString(), returnDate: null, status: 'pending', selectedImage: null
-                },
-                { 
-                    id: 'r4', keyTypeId: 'k3', borrower: 'Ana de Limpieza', purpose: 'Aseo matutino', 
-                    checkoutDate: new Date(Date.now() - 86400000).toISOString(), returnDate: new Date().toISOString(), status: 'returned', selectedImage: null
-                }
+                { id: 'r1', keyTypeId: 'k1', borrower: 'Juan Pérez', purpose: 'Entregar a cliente', checkoutDate: now.toISOString(), returnDate: null, status: 'pending', selectedImage: null },
+                { id: 'r2', keyTypeId: 'k2', borrower: 'Taller Mecánico', purpose: 'Mantenimiento', checkoutDate: new Date(Date.now()-86400000).toISOString(), returnDate: null, status: 'pending', selectedImage: null },
+                { id: 'r3', keyTypeId: 'k1', borrower: 'Carlos López', purpose: 'Prueba de manejo', checkoutDate: new Date(Date.now()-345600000).toISOString(), returnDate: null, status: 'pending', selectedImage: null },
+                { id: 'r4', keyTypeId: 'k3', borrower: 'Ana de Limpieza', purpose: 'Aseo matutino', checkoutDate: new Date(Date.now()-86400000).toISOString(), returnDate: now.toISOString(), status: 'returned', selectedImage: null }
             ];
-
             for (const key of defaultKeys) {
-                const keyDoc = doc(db, 'artifacts', appId, 'public', 'data', 'keyTypes', key.id);
-                await setDoc(keyDoc, { name: key.name, total: key.total, icon: key.icon, images: key.images });
+                await setDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', key.id), { name: key.name, total: key.total, icon: key.icon, images: key.images });
             }
-
             for (const rec of defaultRecords) {
-                const recDoc = doc(db, 'artifacts', appId, 'public', 'data', 'records', rec.id);
-                await setDoc(recDoc, { 
-                    keyTypeId: rec.keyTypeId, borrower: rec.borrower, purpose: rec.purpose, 
-                    checkoutDate: rec.checkoutDate, returnDate: rec.returnDate, status: rec.status, selectedImage: rec.selectedImage 
-                });
+                await setDoc(doc(db, 'controlLlaves', 'datos', 'records', rec.id), { keyTypeId: rec.keyTypeId, borrower: rec.borrower, purpose: rec.purpose, checkoutDate: rec.checkoutDate, returnDate: rec.returnDate, status: rec.status, selectedImage: rec.selectedImage });
             }
-
-            localStorage.setItem(`controlLlaves_seeded_${appId}`, 'true');
+            localStorage.setItem('controlLlaves_seeded', 'true');
         }
 
-        // --- ESCUCHADORES EN TIEMPO REAL (REALTIME SYNC) ---
         function setupRealtimeListeners() {
-            if (!useFirebase || !auth.currentUser) {
-                loadLocalBackup();
-                renderAll();
-                return;
-            }
-
-            // Listener de Tipos de Llaves con Callback de Error
+            if (!useFirebase || !auth.currentUser) { loadLocalBackup(); renderAll(); return; }
             onSnapshot(keyTypesColRef, (snapshot) => {
                 keyTypes = [];
-                snapshot.forEach(doc => {
-                    keyTypes.push({ id: doc.id, ...doc.data() });
-                });
-
-                // Si está vacío y nunca se ha sembrado, inyectamos la semilla demo
-                if (keyTypes.length === 0 && !localStorage.getItem(`controlLlaves_seeded_${appId}`)) {
+                snapshot.forEach(d => { keyTypes.push({ id: d.id, ...d.data() }); });
+                if (keyTypes.length === 0 && !localStorage.getItem('controlLlaves_seeded')) {
                     seedFirebaseDatabase();
-                } else {
-                    renderAll();
-                }
-            }, (error) => {
-                console.error("Firestore onSnapshot keys error: ", error);
-            });
-
-            // Listener de Préstamos con Callback de Error
+                } else { renderAll(); }
+            }, (error) => { console.error("Firestore keys error: ", error); });
             onSnapshot(recordsColRef, (snapshot) => {
                 records = [];
-                snapshot.forEach(doc => {
-                    records.push({ id: doc.id, ...doc.data() });
-                });
+                snapshot.forEach(d => { records.push({ id: d.id, ...d.data() }); });
                 renderAll();
-            }, (error) => {
-                console.error("Firestore onSnapshot records error: ", error);
-            });
+            }, (error) => { console.error("Firestore records error: ", error); });
         }
 
-        // Respaldos locales por si no hay conexión o no has puesto tus credenciales personales aún
         function loadLocalBackup() {
             const savedKeyTypes = localStorage.getItem('controlLlaves_keyTypes');
             const savedRecords = localStorage.getItem('controlLlaves_records');
@@ -476,18 +415,8 @@
                 keyTypes = JSON.parse(savedKeyTypes);
                 records = JSON.parse(savedRecords);
             } else {
-                // Cargar datos por defecto offline
-                keyTypes = [
-                    { id: 'k1', name: 'Toyota (Camionetas)', total: 11, icon: 'ph-car', images: [] },
-                    { id: 'k2', name: 'Hangcha (Montacargas)', total: 5, icon: 'ph-tractor', images: [] },
-                    { id: 'k3', name: 'Oficina Principal', total: 2, icon: 'ph-house', images: [] }
-                ];
-                records = [
-                    { 
-                        id: 'r1', keyTypeId: 'k1', borrower: 'Juan Pérez', purpose: 'Entregar a cliente', 
-                        checkoutDate: new Date().toISOString(), returnDate: null, status: 'pending', selectedImage: null
-                    }
-                ];
+                keyTypes = [{ id: 'k1', name: 'Toyota (Camionetas)', total: 11, icon: 'ph-car', images: [] }];
+                records = [];
                 saveLocalData();
             }
         }
@@ -500,70 +429,47 @@
         }
 
         function calculateDays(dateString) {
-            const date = new Date(dateString);
-            const today = new Date();
-            date.setHours(0, 0, 0, 0);
-            today.setHours(0, 0, 0, 0);
-            const diffTime = Math.abs(today - date);
-            return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            const date = new Date(dateString); const today = new Date();
+            date.setHours(0,0,0,0); today.setHours(0,0,0,0);
+            return Math.floor(Math.abs(today - date) / (1000*60*60*24));
         }
-
         function getDaysText(days) {
-            if (days === 0) return 'Salió hoy';
-            if (days === 1) return 'Lleva 1 día';
-            return `Lleva ${days} días`;
+            if (days === 0) return 'Salió hoy'; if (days === 1) return 'Lleva 1 día'; return `Lleva ${days} días`;
         }
-
         function getStatusStyling(dateString) {
             const days = calculateDays(dateString);
             if (days === 0) return { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-200' };
             if (days <= 2) return { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-200' };
             return { bg: 'bg-rose-100', text: 'text-rose-700', border: 'border-rose-200' };
         }
-
         function formatDate(dateString) {
-            const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
-            return new Date(dateString).toLocaleDateString('es-MX', options);
+            return new Date(dateString).toLocaleDateString('es-MX', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
         }
-
         function getAvailableCount(keyTypeId) {
             const keyType = keyTypes.find(k => k.id === keyTypeId);
             if (!keyType) return 0;
-            const pendingCount = records.filter(r => r.keyTypeId === keyTypeId && r.status === 'pending').length;
-            return keyType.total - pendingCount;
+            return keyType.total - records.filter(r => r.keyTypeId === keyTypeId && r.status === 'pending').length;
         }
-
         function openImageViewer(imageSrc) {
             if (!imageSrc) return;
-            const viewerImg = document.getElementById('viewerImage');
-            viewerImg.src = imageSrc;
+            document.getElementById('viewerImage').src = imageSrc;
             openModal('imageViewerModal');
         }
 
-        // --- MANEJO DE IMÁGENES ---
         function handleImageUpload(event) {
             const files = event.target.files;
             const previewContainer = document.getElementById('imagePreviewContainer');
-            
-            if (files.length > 0) {
-                previewContainer.classList.remove('hidden');
-            }
-
+            if (files.length > 0) previewContainer.classList.remove('hidden');
             Array.from(files).forEach(file => {
                 if (!file.type.startsWith('image/')) return;
-
                 const reader = new FileReader();
                 reader.onload = (e) => {
                     const base64Image = e.target.result;
                     uploadedImages.push(base64Image);
-                    
                     const imgContainer = document.createElement('div');
                     imgContainer.className = 'relative shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-gray-200';
-                    
                     const img = document.createElement('img');
-                    img.src = base64Image;
-                    img.className = 'w-full h-full object-cover';
-                    
+                    img.src = base64Image; img.className = 'w-full h-full object-cover';
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'absolute top-1 right-1 bg-white rounded-full p-0.5 text-red-500 hover:bg-red-100';
                     deleteBtn.innerHTML = '<i class="ph-fill ph-x-circle"></i>';
@@ -573,10 +479,7 @@
                         imgContainer.remove();
                         if (uploadedImages.length === 0) previewContainer.classList.add('hidden');
                     };
-
-                    imgContainer.appendChild(img);
-                    imgContainer.appendChild(deleteBtn);
-                    previewContainer.appendChild(imgContainer);
+                    imgContainer.appendChild(img); imgContainer.appendChild(deleteBtn); previewContainer.appendChild(imgContainer);
                 };
                 reader.readAsDataURL(file);
             });
@@ -585,81 +488,48 @@
 
         function selectImageToLend(imgSrc, element) {
             selectedImageToLend = imgSrc;
-            const allImages = document.querySelectorAll('#lendImagesGrid .image-option');
-            allImages.forEach(img => img.classList.remove('selected'));
+            document.querySelectorAll('#lendImagesGrid .image-option').forEach(img => img.classList.remove('selected'));
             element.classList.add('selected');
         }
 
         function loadImagesForSelectedKey() {
-            const select = document.getElementById('lendKeySelect');
-            const keyTypeId = select.value;
+            const keyTypeId = document.getElementById('lendKeySelect').value;
             const container = document.getElementById('lendImageSelectionContainer');
             const grid = document.getElementById('lendImagesGrid');
             const noImagesMsg = document.getElementById('lendNoImagesMsg');
-            
-            selectedImageToLend = null;
-            grid.innerHTML = '';
-            
-            if (!keyTypeId) {
-                container.classList.add('hidden');
-                return;
-            }
-
+            selectedImageToLend = null; grid.innerHTML = '';
+            if (!keyTypeId) { container.classList.add('hidden'); return; }
             const keyType = keyTypes.find(k => k.id === keyTypeId);
             container.classList.remove('hidden');
-
             if (keyType && keyType.images && keyType.images.length > 0) {
-                const currentlyLentImages = records
-                    .filter(r => r.status === 'pending' && r.keyTypeId === keyTypeId && r.selectedImage)
-                    .map(r => r.selectedImage);
-
-                const availableImagesToLend = keyType.images.filter(imgSrc => !currentlyLentImages.includes(imgSrc));
-
-                if (availableImagesToLend.length > 0) {
-                    noImagesMsg.classList.add('hidden');
-                    grid.classList.remove('hidden');
-                    
-                    availableImagesToLend.forEach((imgSrc) => {
+                const currentlyLentImages = records.filter(r => r.status === 'pending' && r.keyTypeId === keyTypeId && r.selectedImage).map(r => r.selectedImage);
+                const availableImages = keyType.images.filter(imgSrc => !currentlyLentImages.includes(imgSrc));
+                if (availableImages.length > 0) {
+                    noImagesMsg.classList.add('hidden'); grid.classList.remove('hidden');
+                    availableImages.forEach(imgSrc => {
                         const imgWrapper = document.createElement('div');
                         imgWrapper.className = 'shrink-0 w-24 h-24 rounded-lg overflow-hidden image-option bg-gray-100 flex items-center justify-center border-2 border-transparent transition-all cursor-pointer';
                         imgWrapper.onclick = () => selectImageToLend(imgSrc, imgWrapper);
-                        
                         const img = document.createElement('img');
-                        img.src = imgSrc;
-                        img.className = 'w-full h-full object-cover';
-                        
-                        imgWrapper.appendChild(img);
-                        grid.appendChild(imgWrapper);
+                        img.src = imgSrc; img.className = 'w-full h-full object-cover';
+                        imgWrapper.appendChild(img); grid.appendChild(imgWrapper);
                     });
                 } else {
-                    grid.classList.add('hidden');
-                    noImagesMsg.classList.remove('hidden');
+                    grid.classList.add('hidden'); noImagesMsg.classList.remove('hidden');
                     noImagesMsg.innerText = "Todas las imágenes específicas de esta llave están en préstamo actualmente.";
                 }
             } else {
-                grid.classList.add('hidden');
-                noImagesMsg.classList.remove('hidden');
+                grid.classList.add('hidden'); noImagesMsg.classList.remove('hidden');
                 noImagesMsg.innerText = "No se subieron imágenes al crear este tipo de llave.";
             }
         }
 
-        // --- CONTROL DE UI ---
         function switchTab(tabName) {
-            document.getElementById('view-pendientes').classList.add('hidden');
-            document.getElementById('view-inventario').classList.add('hidden');
-            document.getElementById('view-historial').classList.add('hidden');
-            document.getElementById(`view-${tabName}`).classList.remove('hidden');
-
-            const tabs = ['pendientes', 'inventario', 'historial'];
-            tabs.forEach(t => {
+            ['pendientes','inventario','historial'].forEach(t => {
+                document.getElementById(`view-${t}`).classList.toggle('hidden', t !== tabName);
                 const el = document.getElementById(`tab-${t}`);
-                if (t === tabName) {
-                    el.classList.remove('tab-inactive');
-                    el.classList.add('tab-active');
-                } else {
-                    el.classList.remove('tab-active');
-                    el.classList.add('tab-inactive');
-                }
+                el.classList.toggle('tab-active', t === tabName);
+                el.classList.toggle('tab-inactive', t !== tabName);
             });
             renderAll();
         }
@@ -667,29 +537,18 @@
         function openModal(id) {
             const modal = document.getElementById(id);
             modal.classList.remove('hidden');
-            setTimeout(() => {
-                modal.children[0].classList.add('modal-enter-active');
-                modal.children[0].classList.remove('modal-enter');
-            }, 10);
-
+            setTimeout(() => { modal.children[0].classList.add('modal-enter-active'); modal.children[0].classList.remove('modal-enter'); }, 10);
             if (id === 'addKeyModal') {
-                renderIconSelector();
-                uploadedImages = [];
-                const previewContainer = document.getElementById('imagePreviewContainer');
-                previewContainer.innerHTML = '';
-                previewContainer.classList.add('hidden');
+                renderIconSelector(); uploadedImages = [];
+                const pc = document.getElementById('imagePreviewContainer'); pc.innerHTML = ''; pc.classList.add('hidden');
             }
         }
-
         function closeModal(id) {
             const modal = document.getElementById(id);
             modal.children[0].classList.remove('modal-enter-active');
             modal.children[0].classList.add('modal-enter');
-            setTimeout(() => {
-                modal.classList.add('hidden');
-            }, 300);
+            setTimeout(() => { modal.classList.add('hidden'); }, 300);
         }
-
         function showMessage(title, desc) {
             document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-blue-100 text-blue-600';
             document.getElementById('actionIcon').innerHTML = '<i class="ph ph-info"></i>';
@@ -701,74 +560,25 @@
             openModal('actionModal');
         }
 
-        // --- RENDERIZADO DE VISTAS ---
         function renderPendientes() {
             const container = document.getElementById('pendientes-list');
             container.innerHTML = '';
-            
-            const pendingRecords = records.filter(r => r.status === 'pending');
-            pendingRecords.sort((a, b) => new Date(a.checkoutDate) - new Date(b.checkoutDate));
-
+            const pendingRecords = records.filter(r => r.status === 'pending').sort((a,b) => new Date(a.checkoutDate) - new Date(b.checkoutDate));
             if (pendingRecords.length === 0) {
-                container.innerHTML = `
-                    <div class="text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300">
-                        <i class="ph ph-check-circle text-4xl text-gray-400 mb-2 block"></i>
-                        <p class="text-gray-500 font-medium">Todas las llaves están en su lugar.</p>
-                    </div>`;
+                container.innerHTML = `<div class="text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300"><i class="ph ph-check-circle text-4xl text-gray-400 mb-2 block"></i><p class="text-gray-500 font-medium">Todas las llaves están en su lugar.</p></div>`;
                 return;
             }
-
             pendingRecords.forEach(record => {
                 const keyType = keyTypes.find(k => k.id === record.keyTypeId);
                 if (!keyType) return;
-                
                 const style = getStatusStyling(record.checkoutDate);
                 const daysText = getDaysText(calculateDays(record.checkoutDate));
-
-                let visualElementHtml = '';
-                if (record.selectedImage) {
-                    visualElementHtml = `
-                        <div onclick="openImageViewer('${record.selectedImage}')" class="w-12 h-12 rounded-lg overflow-hidden shrink-0 border-2 ${style.border} cursor-pointer hover:opacity-80 transition-opacity relative group">
-                            <img src="${record.selectedImage}" class="w-full h-full object-cover" alt="Llave">
-                            <div class="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center">
-                                <i class="ph-fill ph-magnifying-glass-plus text-white text-xl shadow-sm"></i>
-                            </div>
-                        </div>`;
-                } else {
-                    visualElementHtml = `
-                        <div class="w-12 h-12 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-2xl shrink-0">
-                            <i class="ph ${keyType.icon}"></i>
-                        </div>`;
-                }
-
+                let visualElementHtml = record.selectedImage
+                    ? `<div onclick="openImageViewer('${record.selectedImage}')" class="w-12 h-12 rounded-lg overflow-hidden shrink-0 border-2 ${style.border} cursor-pointer hover:opacity-80 transition-opacity relative group"><img src="${record.selectedImage}" class="w-full h-full object-cover" alt="Llave"><div class="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center"><i class="ph-fill ph-magnifying-glass-plus text-white text-xl shadow-sm"></i></div></div>`
+                    : `<div class="w-12 h-12 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-2xl shrink-0"><i class="ph ${keyType.icon}"></i></div>`;
                 const card = document.createElement('div');
                 card.className = `bg-white p-4 rounded-2xl shadow-sm border ${style.border} flex flex-col gap-3`;
-                card.innerHTML = `
-                    <div class="flex justify-between items-start">
-                        <div class="flex items-center gap-3">
-                            ${visualElementHtml}
-                            <div>
-                                <h3 class="font-bold text-gray-800 leading-tight">${keyType.name}</h3>
-                                <p class="text-sm text-gray-600 mt-0.5"><i class="ph ph-user"></i> ${record.borrower}</p>
-                            </div>
-                        </div>
-                        <span class="text-xs font-bold px-2.5 py-1 rounded-full ${style.bg} ${style.text} whitespace-nowrap">
-                            ${daysText}
-                        </span>
-                    </div>
-                    <div class="text-sm text-gray-500 bg-gray-50 p-2 rounded-lg flex items-start gap-2">
-                        <i class="ph ph-info mt-0.5 shrink-0"></i>
-                        <span class="italic">Uso: ${record.purpose}</span>
-                    </div>
-                    <div class="flex gap-2 mt-1">
-                        <button onclick="promptReturn('${record.id}')" class="flex-1 bg-indigo-50 text-indigo-700 font-semibold py-2 rounded-xl text-sm border border-indigo-100 hover:bg-indigo-100 transition">
-                            <i class="ph ph-download-simple"></i> Recibir
-                        </button>
-                        <button onclick="promptLost('${record.id}')" class="flex-1 bg-red-50 text-red-700 font-semibold py-2 rounded-xl text-sm border border-red-100 hover:bg-red-100 transition">
-                            <i class="ph ph-warning-circle"></i> Extraviada
-                        </button>
-                    </div>
-                `;
+                card.innerHTML = `<div class="flex justify-between items-start"><div class="flex items-center gap-3">${visualElementHtml}<div><h3 class="font-bold text-gray-800 leading-tight">${keyType.name}</h3><p class="text-sm text-gray-600 mt-0.5"><i class="ph ph-user"></i> ${record.borrower}</p></div></div><span class="text-xs font-bold px-2.5 py-1 rounded-full ${style.bg} ${style.text} whitespace-nowrap">${daysText}</span></div><div class="text-sm text-gray-500 bg-gray-50 p-2 rounded-lg flex items-start gap-2"><i class="ph ph-info mt-0.5 shrink-0"></i><span class="italic">Uso: ${record.purpose}</span></div><div class="flex gap-2 mt-1"><button onclick="promptReturn('${record.id}')" class="flex-1 bg-indigo-50 text-indigo-700 font-semibold py-2 rounded-xl text-sm border border-indigo-100 hover:bg-indigo-100 transition"><i class="ph ph-download-simple"></i> Recibir</button><button onclick="promptLost('${record.id}')" class="flex-1 bg-red-50 text-red-700 font-semibold py-2 rounded-xl text-sm border border-red-100 hover:bg-red-100 transition"><i class="ph ph-warning-circle"></i> Extraviada</button></div>`;
                 container.appendChild(card);
             });
         }
@@ -776,53 +586,23 @@
         function renderInventario() {
             const container = document.getElementById('inventario-list');
             container.innerHTML = '';
-
             if (keyTypes.length === 0) {
-                container.innerHTML = `
-                    <div class="col-span-1 sm:col-span-2 text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300">
-                        <i class="ph ph-keys text-4xl text-gray-400 mb-2 block"></i>
-                        <p class="text-gray-500 font-medium">No hay llaves registradas en el inventario.</p>
-                    </div>`;
+                container.innerHTML = `<div class="col-span-1 sm:col-span-2 text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300"><i class="ph ph-keys text-4xl text-gray-400 mb-2 block"></i><p class="text-gray-500 font-medium">No hay llaves registradas en el inventario.</p></div>`;
                 return;
             }
-
             keyTypes.forEach(keyType => {
                 const available = getAvailableCount(keyType.id);
-                
                 let imagesHtml = '';
                 if (keyType.images && keyType.images.length > 0) {
-                    const displayImages = keyType.images.slice(0, 3);
+                    const displayImages = keyType.images.slice(0,3);
                     const extraCount = keyType.images.length - 3;
-                    
-                    let imgs = displayImages.map(imgSrc => 
-                        `<img src="${imgSrc}" class="w-6 h-6 rounded-full object-cover border border-white -ml-2 first:ml-0" alt="img">`
-                    ).join('');
-                    
-                    if (extraCount > 0) {
-                        imgs += `<div class="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center border border-white -ml-2 text-gray-600 font-medium">+${extraCount}</div>`;
-                    }
-                    
+                    let imgs = displayImages.map(imgSrc => `<img src="${imgSrc}" class="w-6 h-6 rounded-full object-cover border border-white -ml-2 first:ml-0" alt="img">`).join('');
+                    if (extraCount > 0) imgs += `<div class="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center border border-white -ml-2 text-gray-600 font-medium">+${extraCount}</div>`;
                     imagesHtml = `<div class="flex mt-2">${imgs}</div>`;
                 }
-
                 const card = document.createElement('div');
                 card.className = 'bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-4 relative group';
-                card.innerHTML = `
-                    <button onclick="promptDeleteKey('${keyType.id}')" class="absolute top-2 right-2 text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100" title="Eliminar tipo de llave">
-                        <i class="ph-fill ph-trash"></i>
-                    </button>
-                    <div class="w-12 h-12 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-2xl shrink-0 mt-1">
-                        <i class="ph ${keyType.icon}"></i>
-                    </div>
-                    <div class="flex-1 min-w-0 pr-6">
-                        <h3 class="font-bold text-gray-800 truncate block">${keyType.name}</h3>
-                        <div class="flex gap-3 text-sm mt-1">
-                            <span class="text-gray-500">Total: ${keyType.total}</span>
-                            <span class="${available > 0 ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'}">Disp: ${available}</span>
-                        </div>
-                        ${imagesHtml}
-                    </div>
-                `;
+                card.innerHTML = `<button onclick="promptDeleteKey('${keyType.id}')" class="absolute top-2 right-2 text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100" title="Eliminar tipo de llave"><i class="ph-fill ph-trash"></i></button><div class="w-12 h-12 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-2xl shrink-0 mt-1"><i class="ph ${keyType.icon}"></i></div><div class="flex-1 min-w-0 pr-6"><h3 class="font-bold text-gray-800 truncate block">${keyType.name}</h3><div class="flex gap-3 text-sm mt-1"><span class="text-gray-500">Total: ${keyType.total}</span><span class="${available > 0 ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'}">Disp: ${available}</span></div>${imagesHtml}</div>`;
                 container.appendChild(card);
             });
         }
@@ -830,64 +610,30 @@
         function renderHistorial() {
             const container = document.getElementById('historial-list');
             container.innerHTML = '';
-            
-            const historyRecords = records.filter(r => r.status !== 'pending');
-            historyRecords.sort((a, b) => new Date(b.returnDate) - new Date(a.returnDate));
-
+            const historyRecords = records.filter(r => r.status !== 'pending').sort((a,b) => new Date(b.returnDate) - new Date(a.returnDate));
             if (historyRecords.length === 0) {
-                container.innerHTML = `
-                    <div class="text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300">
-                        <p class="text-gray-500">Aún no hay historial de devoluciones.</p>
-                    </div>`;
+                container.innerHTML = `<div class="text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300"><p class="text-gray-500">Aún no hay historial de devoluciones.</p></div>`;
                 return;
             }
-
             historyRecords.forEach(record => {
                 const keyType = keyTypes.find(k => k.id === record.keyTypeId);
                 if (!keyType) return;
-                
                 const isReturned = record.status === 'returned';
                 const statusColor = isReturned ? 'text-emerald-600 bg-emerald-100' : 'text-rose-600 bg-rose-100';
                 const statusIcon = isReturned ? 'ph-check-circle' : 'ph-warning';
                 const statusText = isReturned ? 'Recibida' : 'Extraviada';
-
-                let visualElementHtml = '';
-                if (record.selectedImage) {
-                    visualElementHtml = `
-                        <div class="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-gray-200 opacity-80">
-                            <img src="${record.selectedImage}" class="w-full h-full object-cover grayscale" alt="Llave">
-                        </div>`;
-                } else {
-                    visualElementHtml = `
-                        <div class="w-10 h-10 rounded-full ${statusColor} flex items-center justify-center text-xl shrink-0">
-                            <i class="ph ${statusIcon}"></i>
-                        </div>`;
-                }
-
+                let visualElementHtml = record.selectedImage
+                    ? `<div class="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-gray-200 opacity-80"><img src="${record.selectedImage}" class="w-full h-full object-cover grayscale" alt="Llave"></div>`
+                    : `<div class="w-10 h-10 rounded-full ${statusColor} flex items-center justify-center text-xl shrink-0"><i class="ph ${statusIcon}"></i></div>`;
                 const card = document.createElement('div');
                 card.className = 'bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex gap-3 opacity-80';
-                card.innerHTML = `
-                    ${visualElementHtml}
-                    <div class="flex-1">
-                        <div class="flex justify-between items-start">
-                            <h3 class="font-bold text-gray-800">${keyType.name}</h3>
-                            <span class="text-xs text-gray-500">${formatDate(record.returnDate)}</span>
-                        </div>
-                        <p class="text-sm text-gray-600">Por: ${record.borrower}</p>
-                        <p class="text-xs text-gray-500 mt-1">Estado final: <strong class="${isReturned ? 'text-emerald-600' : 'text-rose-600'}">${statusText}</strong></p>
-                    </div>
-                `;
+                card.innerHTML = `${visualElementHtml}<div class="flex-1"><div class="flex justify-between items-start"><h3 class="font-bold text-gray-800">${keyType.name}</h3><span class="text-xs text-gray-500">${formatDate(record.returnDate)}</span></div><p class="text-sm text-gray-600">Por: ${record.borrower}</p><p class="text-xs text-gray-500 mt-1">Estado final: <strong class="${isReturned ? 'text-emerald-600' : 'text-rose-600'}">${statusText}</strong></p></div>`;
                 container.appendChild(card);
             });
         }
 
-        function renderAll() {
-            renderPendientes();
-            renderInventario();
-            renderHistorial();
-        }
+        function renderAll() { renderPendientes(); renderInventario(); renderHistorial(); }
 
-        // --- ACCIONES DE FORMULARIOS ---
         function renderIconSelector() {
             const container = document.getElementById('icon-selector');
             container.innerHTML = '';
@@ -895,139 +641,68 @@
                 const btn = document.createElement('button');
                 btn.className = `p-3 text-2xl rounded-xl border flex items-center justify-center transition ${selectedIcon === icon ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`;
                 btn.innerHTML = `<i class="ph ${icon}"></i>`;
-                btn.onclick = () => {
-                    selectedIcon = icon;
-                    renderIconSelector();
-                };
+                btn.onclick = () => { selectedIcon = icon; renderIconSelector(); };
                 container.appendChild(btn);
             });
         }
 
-        // Guardado de llaves integrado a Firestore
         async function saveNewKey() {
             const name = document.getElementById('newKeyName').value.trim();
             const total = parseInt(document.getElementById('newKeyTotal').value);
-
-            if (!name || isNaN(total) || total <= 0) {
-                showMessage("Faltan datos", "Por favor ingresa un nombre y una cantidad válida.");
-                return;
-            }
-
+            if (!name || isNaN(total) || total <= 0) { showMessage("Faltan datos", "Por favor ingresa un nombre y una cantidad válida."); return; }
             const newId = 'k' + Date.now();
-            const imagesToSave = [...uploadedImages];
-
-            const keyData = {
-                name: name,
-                total: total,
-                icon: selectedIcon,
-                images: imagesToSave
-            };
-
+            const keyData = { name, total, icon: selectedIcon, images: [...uploadedImages] };
             if (useFirebase && auth.currentUser) {
-                try {
-                    const keyDoc = doc(db, 'artifacts', appId, 'public', 'data', 'keyTypes', newId);
-                    await setDoc(keyDoc, keyData);
-                } catch (err) {
-                    console.error("Error saving key to Firestore: ", err);
-                }
-            } else {
-                keyTypes.push({ id: newId, ...keyData });
-                saveLocalData();
-                renderAll();
-            }
-
-            document.getElementById('newKeyName').value = '';
-            document.getElementById('newKeyTotal').value = '';
-            uploadedImages = [];
-            document.getElementById('imagePreviewContainer').innerHTML = '';
-            document.getElementById('imagePreviewContainer').classList.add('hidden');
-            
+                try { await setDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', newId), keyData); }
+                catch (err) { console.error("Error saving key: ", err); }
+            } else { keyTypes.push({ id: newId, ...keyData }); saveLocalData(); renderAll(); }
+            document.getElementById('newKeyName').value = ''; document.getElementById('newKeyTotal').value = '';
+            uploadedImages = []; document.getElementById('imagePreviewContainer').innerHTML = ''; document.getElementById('imagePreviewContainer').classList.add('hidden');
             closeModal('addKeyModal');
         }
 
         function openLendModal() {
             const select = document.getElementById('lendKeySelect');
             select.innerHTML = '<option value="">-- Selecciona una categoría --</option>';
-            
             let hasAvailable = false;
             keyTypes.forEach(keyType => {
                 const available = getAvailableCount(keyType.id);
-                if (available > 0) {
-                    hasAvailable = true;
-                    select.innerHTML += `<option value="${keyType.id}">${keyType.name} (${available} disponibles)</option>`;
-                }
+                if (available > 0) { hasAvailable = true; select.innerHTML += `<option value="${keyType.id}">${keyType.name} (${available} disponibles)</option>`; }
             });
-
-            if (!hasAvailable) {
-                showMessage("Sin llaves", "Todas las llaves están prestadas en este momento.");
-                return;
-            }
-
+            if (!hasAvailable) { showMessage("Sin llaves", "Todas las llaves están prestadas en este momento."); return; }
             document.getElementById('lendImageSelectionContainer').classList.add('hidden');
             selectedImageToLend = null;
             openModal('lendKeyModal');
         }
 
-        // Guardado de préstamos integrado a Firestore
         async function saveLoan() {
             const keyTypeId = document.getElementById('lendKeySelect').value;
             const borrower = document.getElementById('lendBorrower').value.trim();
             const purpose = document.getElementById('lendPurpose').value.trim();
-
-            if (!keyTypeId || !borrower || !purpose) {
-                showMessage("Faltan datos", "Por favor completa todos los campos para registrar la entrega.");
-                return;
-            }
-
+            if (!keyTypeId || !borrower || !purpose) { showMessage("Faltan datos", "Por favor completa todos los campos."); return; }
             const newId = 'r' + Date.now();
-            const newRecord = {
-                keyTypeId: keyTypeId,
-                borrower: borrower,
-                purpose: purpose,
-                checkoutDate: new Date().toISOString(),
-                returnDate: null,
-                status: 'pending',
-                selectedImage: selectedImageToLend
-            };
-
+            const newRecord = { keyTypeId, borrower, purpose, checkoutDate: new Date().toISOString(), returnDate: null, status: 'pending', selectedImage: selectedImageToLend };
             if (useFirebase && auth.currentUser) {
-                try {
-                    const recDoc = doc(db, 'artifacts', appId, 'public', 'data', 'records', newId);
-                    await setDoc(recDoc, newRecord);
-                } catch (err) {
-                    console.error("Error saving record to Firestore: ", err);
-                }
-            } else {
-                records.push({ id: newId, ...newRecord });
-                saveLocalData();
-                renderAll();
-            }
-
-            document.getElementById('lendKeySelect').value = '';
-            document.getElementById('lendBorrower').value = '';
-            document.getElementById('lendPurpose').value = '';
+                try { await setDoc(doc(db, 'controlLlaves', 'datos', 'records', newId), newRecord); }
+                catch (err) { console.error("Error saving record: ", err); }
+            } else { records.push({ id: newId, ...newRecord }); saveLocalData(); renderAll(); }
+            document.getElementById('lendKeySelect').value = ''; document.getElementById('lendBorrower').value = ''; document.getElementById('lendPurpose').value = '';
             document.getElementById('lendImageSelectionContainer').classList.add('hidden');
             selectedImageToLend = null;
-            
-            closeModal('lendKeyModal');
-            switchTab('pendientes');
+            closeModal('lendKeyModal'); switchTab('pendientes');
         }
 
         function promptReturn(recordId) {
             pendingActionId = recordId;
             const record = records.find(r => r.id === recordId);
             const keyType = keyTypes.find(k => k.id === record.keyTypeId);
-            
             document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-emerald-100 text-emerald-600';
             document.getElementById('actionIcon').innerHTML = '<i class="ph ph-check-circle"></i>';
             document.getElementById('actionTitle').innerText = '¿Recibir Llave?';
             document.getElementById('actionDesc').innerText = `Vas a marcar como recibida la llave de ${keyType.name} que tiene ${record.borrower}.`;
-            
             const confirmBtn = document.getElementById('actionConfirmBtn');
             confirmBtn.className = 'flex-1 bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition';
-            confirmBtn.innerText = 'Sí, Recibida';
-            confirmBtn.onclick = () => confirmAction('returned');
-            
+            confirmBtn.innerText = 'Sí, Recibida'; confirmBtn.onclick = () => confirmAction('returned');
             openModal('actionModal');
         }
 
@@ -1035,255 +710,122 @@
             pendingActionId = recordId;
             const record = records.find(r => r.id === recordId);
             const keyType = keyTypes.find(k => k.id === record.keyTypeId);
-
             document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-rose-100 text-rose-600';
             document.getElementById('actionIcon').innerHTML = '<i class="ph ph-warning"></i>';
             document.getElementById('actionTitle').innerText = '¿Reportar Extraviada?';
             document.getElementById('actionDesc').innerText = `Vas a reportar como EXTRAVIADA la llave de ${keyType.name} prestada a ${record.borrower}.`;
-            
             const confirmBtn = document.getElementById('actionConfirmBtn');
             confirmBtn.className = 'flex-1 bg-rose-600 text-white font-bold py-3 rounded-xl hover:bg-rose-700 transition';
-            confirmBtn.innerText = 'Reportar';
-            confirmBtn.onclick = () => confirmAction('lost');
-
+            confirmBtn.innerText = 'Reportar'; confirmBtn.onclick = () => confirmAction('lost');
             openModal('actionModal');
         }
 
-        // Confirmación de estado de préstamo en Firestore
         async function confirmAction(status) {
             const recordIndex = records.findIndex(r => r.id === pendingActionId);
             if (recordIndex !== -1) {
                 const nowStr = new Date().toISOString();
-                
                 if (useFirebase && auth.currentUser) {
-                    try {
-                        const recDoc = doc(db, 'artifacts', appId, 'public', 'data', 'records', pendingActionId);
-                        await updateDoc(recDoc, {
-                            status: status,
-                            returnDate: nowStr
-                        });
-                    } catch (err) {
-                        console.error("Error updating record on Firestore: ", err);
-                    }
-                } else {
-                    records[recordIndex].status = status;
-                    records[recordIndex].returnDate = nowStr;
-                    saveLocalData();
-                    renderAll();
-                }
+                    try { await updateDoc(doc(db, 'controlLlaves', 'datos', 'records', pendingActionId), { status, returnDate: nowStr }); }
+                    catch (err) { console.error("Error updating record: ", err); }
+                } else { records[recordIndex].status = status; records[recordIndex].returnDate = nowStr; saveLocalData(); renderAll(); }
             }
-            closeModal('actionModal');
-            pendingActionId = null;
+            closeModal('actionModal'); pendingActionId = null;
         }
 
         function promptDeleteKey(keyTypeId) {
             pendingDeleteKeyId = keyTypeId;
             const keyType = keyTypes.find(k => k.id === keyTypeId);
-            const hasPending = records.some(r => r.keyTypeId === keyTypeId && r.status === 'pending');
-            
-            if (hasPending) {
-                showMessage("No se puede eliminar", `Aún hay llaves de "${keyType.name}" prestadas. Debes recibirlas primero antes de eliminar el tipo de llave del inventario.`);
-                pendingDeleteKeyId = null;
-                return;
+            if (records.some(r => r.keyTypeId === keyTypeId && r.status === 'pending')) {
+                showMessage("No se puede eliminar", `Aún hay llaves de "${keyType.name}" prestadas.`);
+                pendingDeleteKeyId = null; return;
             }
-
             document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-red-100 text-red-600';
             document.getElementById('actionIcon').innerHTML = '<i class="ph ph-trash"></i>';
             document.getElementById('actionTitle').innerText = '¿Eliminar Llave?';
-            document.getElementById('actionDesc').innerText = `Vas a eliminar "${keyType.name}" del inventario de forma permanente. El historial de préstamos asociados se mantendrá, pero no podrás prestarla nuevamente.`;
-            
+            document.getElementById('actionDesc').innerText = `Vas a eliminar "${keyType.name}" del inventario de forma permanente.`;
             const confirmBtn = document.getElementById('actionConfirmBtn');
             confirmBtn.className = 'flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 transition';
-            confirmBtn.innerText = 'Sí, Eliminar';
-            confirmBtn.onclick = () => confirmDeleteKey();
-            
+            confirmBtn.innerText = 'Sí, Eliminar'; confirmBtn.onclick = () => confirmDeleteKey();
             openModal('actionModal');
         }
 
-        // Eliminación del tipo de llave en Firestore
         async function confirmDeleteKey() {
             if (pendingDeleteKeyId) {
                 if (useFirebase && auth.currentUser) {
-                    try {
-                        const keyDoc = doc(db, 'artifacts', appId, 'public', 'data', 'keyTypes', pendingDeleteKeyId);
-                        await deleteDoc(keyDoc);
-                    } catch (err) {
-                        console.error("Error deleting key from Firestore: ", err);
-                    }
-                } else {
-                    keyTypes = keyTypes.filter(k => k.id !== pendingDeleteKeyId);
-                    saveLocalData();
-                    renderAll();
-                }
+                    try { await deleteDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', pendingDeleteKeyId)); }
+                    catch (err) { console.error("Error deleting key: ", err); }
+                } else { keyTypes = keyTypes.filter(k => k.id !== pendingDeleteKeyId); saveLocalData(); renderAll(); }
             }
-            closeModal('actionModal');
-            pendingDeleteKeyId = null;
+            closeModal('actionModal'); pendingDeleteKeyId = null;
         }
 
-        // --- INTEGRACIÓN CON GEMINI API ---
         async function callGeminiAPI(prompt, systemPrompt = "") {
-            const apiKey = ""; // API Key proveída por el entorno Canvas
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
-
-            const payload = {
-                contents: [{ parts: [{ text: prompt }] }]
-            };
-            
-            if (systemPrompt) {
-                payload.systemInstruction = { parts: [{ text: systemPrompt }] };
-            }
-
+            const apiKey = "";
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
+            const payload = { contents: [{ parts: [{ text: prompt }] }] };
+            if (systemPrompt) payload.systemInstruction = { parts: [{ text: systemPrompt }] };
             try {
-                const response = await fetch(apiUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
-                });
+                const response = await fetch(apiUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                 const result = await response.json();
-                
-                if (result.candidates && result.candidates[0].content?.parts[0]?.text) {
-                    return result.candidates[0].content.parts[0].text;
-                } else {
-                    console.error("Respuesta inesperada de la API:", result);
-                    throw new Error("Formato de respuesta inválido.");
-                }
-            } catch (error) {
-                console.error("Error llamando a Gemini:", error);
-                return null;
-            }
+                if (result.candidates && result.candidates[0].content?.parts[0]?.text) return result.candidates[0].content.parts[0].text;
+                throw new Error("Formato de respuesta inválido.");
+            } catch (error) { console.error("Error llamando a Gemini:", error); return null; }
         }
 
         async function suggestIconWithAI() {
             const nameInput = document.getElementById('newKeyName').value.trim();
-            if (!nameInput) {
-                showMessage("Faltan datos", "Escribe el nombre o marca de la llave primero para que la IA sugiera un ícono.");
-                return;
-            }
-
+            if (!nameInput) { showMessage("Faltan datos", "Escribe el nombre o marca de la llave primero."); return; }
             const btn = document.getElementById('btnSuggestIcon');
             const originalContent = btn.innerHTML;
-            btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Pensando...';
-            btn.disabled = true;
-
-            const systemPrompt = "Eres un asistente de interfaz de usuario. Tu única tarea es recibir un nombre de objeto, vehículo o lugar y seleccionar el nombre del ícono más apropiado de una lista estricta. Responde ÚNICAMENTE con el string del ícono exacto de la lista, sin explicaciones, sin markdown y sin texto adicional.";
-            
-            const prompt = `
-            Nombre de la llave: "${nameInput}"
-            Lista de íconos permitidos: [${iconOptions.join(', ')}]
-            
-            Devuelve solo el ícono de la lista que mejor lo represente. Si no hay una correspondencia clara, devuelve "ph-lock-key".
-            `;
-
+            btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Pensando...'; btn.disabled = true;
+            const systemPrompt = "Eres un asistente de UI. Responde ÚNICAMENTE con el string del ícono exacto de la lista, sin explicaciones ni markdown.";
+            const prompt = `Nombre: "${nameInput}"
+Lista: [${iconOptions.join(', ')}]
+Devuelve solo el ícono más apropiado. Si no hay correspondencia, devuelve "ph-lock-key".`;
             const suggestedIcon = await callGeminiAPI(prompt, systemPrompt);
-
             if (suggestedIcon) {
-                const cleanIcon = suggestedIcon.trim().replace(/['"`]/g, '');
-                if (iconOptions.includes(cleanIcon)) {
-                    selectedIcon = cleanIcon;
-                    renderIconSelector();
-                } else {
-                    console.warn("La IA devolvió un ícono no válido:", cleanIcon);
-                }
-            } else {
-                showMessage("Aviso", "No se pudo obtener una sugerencia de la IA en este momento.");
-            }
-
-            btn.innerHTML = originalContent;
-            btn.disabled = false;
+                const cleanIcon = suggestedIcon.trim().replace(/['"\`]/g, '');
+                if (iconOptions.includes(cleanIcon)) { selectedIcon = cleanIcon; renderIconSelector(); }
+            } else { showMessage("Aviso", "No se pudo obtener una sugerencia de la IA."); }
+            btn.innerHTML = originalContent; btn.disabled = false;
         }
 
         async function generateInsights() {
             const pendingLoans = records.filter(r => r.status === 'pending').map(r => {
                 const kt = keyTypes.find(k => k.id === r.keyTypeId);
-                return {
-                    tipo_llave: kt ? kt.name : 'Desconocida',
-                    prestada_a: r.borrower,
-                    motivo: r.purpose,
-                    dias_fuera: calculateDays(r.checkoutDate)
-                };
+                return { tipo_llave: kt ? kt.name : 'Desconocida', prestada_a: r.borrower, motivo: r.purpose, dias_fuera: calculateDays(r.checkoutDate) };
             });
-
-            const inventoryState = keyTypes.map(kt => ({
-                tipo_llave: kt.name,
-                inventario_total: kt.total,
-                disponibles_actualmente: getAvailableCount(kt.id)
-            }));
-
-            const dataToAnalyze = {
-                llaves_pendientes_de_devolucion: pendingLoans,
-                estado_general_inventario: inventoryState
-            };
-
+            const inventoryState = keyTypes.map(kt => ({ tipo_llave: kt.name, inventario_total: kt.total, disponibles_actualmente: getAvailableCount(kt.id) }));
             document.getElementById('aiInsightsContent').classList.add('hidden');
             document.getElementById('aiLoadingState').classList.remove('hidden');
             openModal('aiInsightsModal');
+            const systemPrompt = "Eres un analista experto en control de inventario. Proporciona resúmenes ejecutivos claros y profesionales.";
+            const prompt = `Analiza estos datos JSON del sistema Control de Llaves:
+${JSON.stringify({llaves_pendientes: pendingLoans, inventario: inventoryState}, null, 2)}
 
-            const systemPrompt = "Eres un analista experto en control de inventario y logística. Proporcionas resúmenes ejecutivos claros, directos, útiles y con tono profesional.";
-            const prompt = `
-            Analiza los siguientes datos JSON del sistema de 'Control de Llaves' de una empresa.
-            
-            Datos en formato JSON:
-            ${JSON.stringify(dataToAnalyze, null, 2)}
-            
-            Por favor, genera un reporte ejecutivo usando formato HTML básico válido (utiliza etiquetas <b>, <ul>, <li>, <p> para estilizar). 
-            Tu reporte debe incluir:
-            1. <p> Un resumen general breve del estado del inventario (cuántas llaves están fuera vs disponibles).
-            2. <ul> Una lista destacando las llaves con MAYOR riesgo de extravío (aquellas que llevan 1 o más días fuera, si las hay). Menciona quién la tiene y cuántos días lleva.
-            3. <p> Una sugerencia o recomendación estratégica breve basada en estos datos.
-            
-            NO devuelvas el texto envuelto en bloques de código markdown (como \`\`\`html), devuelve únicamente las etiquetas HTML crudas.
-            `;
-
+Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen del estado, 2) Llaves con mayor riesgo (1+ días fuera), 3) Recomendación. NO uses bloques markdown.`;
             const aiResponse = await callGeminiAPI(prompt, systemPrompt);
-
-            const contentDiv = document.getElementById('aiInsightsContent');
-            const loadingDiv = document.getElementById('aiLoadingState');
-            
-            loadingDiv.classList.add('hidden');
-            contentDiv.classList.remove('hidden');
-
-            if (aiResponse) {
-                const cleanHTML = aiResponse.replace(/```html/g, '').replace(/```/g, '').trim();
-                contentDiv.innerHTML = cleanHTML;
-            } else {
-                contentDiv.innerHTML = `
-                    <div class="flex items-center gap-2 text-rose-600 font-medium">
-                        <i class="ph-fill ph-warning-circle text-2xl"></i>
-                        <p>Ocurrió un error al contactar a la IA. Por favor, intenta nuevamente más tarde.</p>
-                    </div>`;
-            }
+            document.getElementById('aiLoadingState').classList.add('hidden');
+            document.getElementById('aiInsightsContent').classList.remove('hidden');
+            document.getElementById('aiInsightsContent').innerHTML = aiResponse
+                ? aiResponse.replace(/```html/g,'').replace(/```/g,'').trim()
+                : '<div class="flex items-center gap-2 text-rose-600 font-medium"><i class="ph-fill ph-warning-circle text-2xl"></i><p>Error al contactar la IA.</p></div>';
         }
 
-        // --- PUBLICAR MÉTODOS AL ÁMBITO GLOBAL ---
-        window.switchTab = switchTab;
-        window.openModal = openModal;
-        window.closeModal = closeModal;
-        window.showMessage = showMessage;
-        window.openImageViewer = openImageViewer;
-        window.handleImageUpload = handleImageUpload;
-        window.selectImageToLend = selectImageToLend;
-        window.loadImagesForSelectedKey = loadImagesForSelectedKey;
-        window.saveNewKey = saveNewKey;
-        window.openLendModal = openLendModal;
-        window.saveLoan = saveLoan;
-        window.promptReturn = promptReturn;
-        window.promptLost = promptLost;
-        window.confirmAction = confirmAction;
-        window.promptDeleteKey = promptDeleteKey;
-        window.confirmDeleteKey = confirmDeleteKey;
-        window.suggestIconWithAI = suggestIconWithAI;
+        window.switchTab = switchTab; window.openModal = openModal; window.closeModal = closeModal;
+        window.showMessage = showMessage; window.openImageViewer = openImageViewer;
+        window.handleImageUpload = handleImageUpload; window.selectImageToLend = selectImageToLend;
+        window.loadImagesForSelectedKey = loadImagesForSelectedKey; window.saveNewKey = saveNewKey;
+        window.openLendModal = openLendModal; window.saveLoan = saveLoan;
+        window.promptReturn = promptReturn; window.promptLost = promptLost;
+        window.confirmAction = confirmAction; window.promptDeleteKey = promptDeleteKey;
+        window.confirmDeleteKey = confirmDeleteKey; window.suggestIconWithAI = suggestIconWithAI;
         window.generateInsights = generateInsights;
 
-        // --- INICIALIZACIÓN ---
         window.onload = async () => {
             const user = await authenticateFirebase();
-            if (user) {
-                setupRealtimeListeners();
-            } else {
-                // Si no hay configuración aún, inicializar con el LocalStorage para que nunca falle
-                loadLocalBackup();
-                renderAll();
-            }
+            if (user) { setupRealtimeListeners(); }
+            else { loadLocalBackup(); renderAll(); }
         };
     </script>
 </body>
