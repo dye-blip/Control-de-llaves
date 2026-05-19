@@ -310,16 +310,15 @@
         import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         // ====================================================================
-        // CONFIGURACIÓN DE TU FIREBASE PERSONAL
+        // CONFIGURACIÓN DE TU FIREBASE PERSONAL (Cargada desde tu consola)
         // ====================================================================
-        // Reemplaza los siguientes datos con las credenciales que copiaste de tu Consola de Firebase.
         const miConfiguracionPersonalDeFirebase = {
-            apiKey: "TU_API_KEY_AQUÍ",
-            authDomain: "TU_PROJECT_ID.firebaseapp.com",
-            projectId: "TU_PROJECT_ID",
-            storageBucket: "TU_PROJECT_ID.appspot.com",
-            messagingSenderId: "TU_SENDER_ID",
-            appId: "TU_APP_ID"
+            apiKey: "AIzaSyBTcu3v7dVyvm29CvKSdTYmUtqfP7bCaN4",
+            authDomain: "control-llaves-14396.firebaseapp.com",
+            projectId: "control-llaves-14396",
+            storageBucket: "control-llaves-14396.firebasestorage.app",
+            messagingSenderId: "623552696309",
+            appId: "1:623552696309:web:def6e40ab8413e61cadabc"
         };
         // ====================================================================
 
@@ -500,7 +499,6 @@
             }
         }
 
-        // --- STREAMING_CHUNK: Implementando cálculos de tiempo y estados... ---
         function calculateDays(dateString) {
             const date = new Date(dateString);
             const today = new Date();
@@ -645,7 +643,6 @@
             }
         }
 
-        // --- STREAMING_CHUNK: Creando el manejador de navegación de pestañas... ---
         // --- CONTROL DE UI ---
         function switchTab(tabName) {
             document.getElementById('view-pendientes').classList.add('hidden');
@@ -704,7 +701,6 @@
             openModal('actionModal');
         }
 
-        // --- STREAMING_CHUNK: Renderizando listas y tarjetas... ---
         // --- RENDERIZADO DE VISTAS ---
         function renderPendientes() {
             const container = document.getElementById('pendientes-list');
@@ -907,7 +903,6 @@
             });
         }
 
-        // --- STREAMING_CHUNK: Conectando guardado y eliminación con Firestore en la nube... ---
         // Guardado de llaves integrado a Firestore
         async function saveNewKey() {
             const name = document.getElementById('newKeyName').value.trim();
@@ -1125,11 +1120,10 @@
             pendingDeleteKeyId = null;
         }
 
-        // --- STREAMING_CHUNK: Integrando funciones inteligentes de Gemini AI... ---
         // --- INTEGRACIÓN CON GEMINI API ---
         async function callGeminiAPI(prompt, systemPrompt = "") {
             const apiKey = ""; // API Key proveída por el entorno Canvas
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
 
             const payload = {
                 contents: [{ parts: [{ text: prompt }] }]
