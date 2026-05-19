@@ -217,7 +217,7 @@
         </div>
     </div>
 
-    <!-- MODAL: Prestar Llave (NUEVO MODAL QUE FALTABA) -->
+    <!-- MODAL: Prestar Llave -->
     <div id="lendKeyModal" class="fixed inset-0 bg-black/50 z-50 hidden flex flex-col justify-end sm:justify-center items-center p-4">
         <div class="bg-white w-full sm:w-[32rem] max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl transform transition-transform">
             <div class="flex justify-between items-center mb-6">
@@ -303,81 +303,189 @@
         <p class="absolute bottom-6 text-white/50 text-sm">Toca fuera de la imagen para cerrar</p>
     </div>
 
-    <script>
-        // --- ESTADO DE LA APLICACIÓN (In-Memory -> LocalStorage) ---
-        
-        // Íconos disponibles para elegir
-        const iconOptions = ['ph-car', 'ph-jeep', 'ph-tractor', 'ph-house', 'ph-lock-key', 'ph-truck', 'ph-motorcycle', 'ph-star'];
-        let selectedIcon = 'ph-car';
-        
-        // Variables para gestionar imágenes durante la creación/préstamo
-        let uploadedImages = []; // Array de base64 para la llave nueva
-        let selectedImageToLend = null; // URL de la imagen seleccionada al prestar
+    <!-- Integración modular con Firebase Firestore SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, updateDoc, deleteDoc, onSnapshot, collection } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Funciones para guardar y cargar datos de LocalStorage
-        function saveData() {
-            localStorage.setItem('controlLlaves_keyTypes', JSON.stringify(keyTypes));
-            localStorage.setItem('controlLlaves_records', JSON.stringify(records));
-        }
+        // --- CONFIGURACIÓN E INITIALIZACIÓN DE FIREBASE ---
+        let db = null;
+        let auth = null;
+        let useFirebase = false;
 
-        function loadData() {
-            const savedKeyTypes = localStorage.getItem('controlLlaves_keyTypes');
-            const savedRecords = localStorage.getItem('controlLlaves_records');
-            
-            if (savedKeyTypes && savedRecords) {
-                keyTypes = JSON.parse(savedKeyTypes);
-                records = JSON.parse(savedRecords);
-                return true;
+        // Recuperar ID de la aplicación y configuraciones del entorno global
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'control-llaves-app';
+        let firebaseConfig = null;
+
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+            try {
+                firebaseConfig = JSON.parse(__firebase_config);
+                useFirebase = true;
+            } catch (e) {
+                console.error("Error parsing firebase config, falling back to offline", e);
             }
-            return false;
         }
 
-        // Datos iniciales
+        // Referencias de colecciones (con rutas estrictas de la regla 1)
+        let keyTypesColRef = null;
+        let recordsColRef = null;
+
+        // --- ESTADO LOCAL EN MEMORIA (Sincronizado) ---
         let keyTypes = [];
         let records = [];
+        const iconOptions = ['ph-car', 'ph-jeep', 'ph-tractor', 'ph-house', 'ph-lock-key', 'ph-truck', 'ph-motorcycle', 'ph-star'];
+        let selectedIcon = 'ph-car';
+        let uploadedImages = []; 
+        let selectedImageToLend = null;
+        let pendingActionId = null;
+        let pendingDeleteKeyId = null;
 
-        // Simulamos fechas para ver los colores (solo se usan si no hay datos en LocalStorage)
-        const now = new Date();
-        const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
-        const fourDaysAgo = new Date(now); fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
+        // --- FLUJO DE AUTENTICACIÓN ---
+        async function authenticateFirebase() {
+            if (!useFirebase) return null;
+            try {
+                const app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
 
-        // Si no hay datos guardados, cargamos los de ejemplo
-        if (!loadData()) {
-            keyTypes = [
+                // Regla 1: Rutas de colecciones públicas seguras
+                keyTypesColRef = collection(db, 'artifacts', appId, 'public', 'data', 'keyTypes');
+                recordsColRef = collection(db, 'artifacts', appId, 'public', 'data', 'records');
+
+                let userCredential;
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    userCredential = await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    userCredential = await signInAnonymously(auth);
+                }
+                return userCredential.user;
+            } catch (err) {
+                console.error("Firebase Auth/Init Error: ", err);
+                useFirebase = false; // Fallback elegante a modo local si falla la conexión
+                return null;
+            }
+        }
+
+        // --- SEMILLA DE BASE DE DATOS INICIAL ---
+        // Se ejecuta solo la primera vez para que no empiece la base de datos vacía
+        async function seedFirebaseDatabase() {
+            if (!useFirebase || !auth.currentUser) return;
+
+            const defaultKeys = [
                 { id: 'k1', name: 'Toyota (Camionetas)', total: 11, icon: 'ph-car', images: [] },
                 { id: 'k2', name: 'Hangcha (Montacargas)', total: 5, icon: 'ph-tractor', images: [] },
                 { id: 'k3', name: 'Oficina Principal', total: 2, icon: 'ph-house', images: [] }
             ];
 
-            records = [
+            const defaultRecords = [
                 { 
                     id: 'r1', keyTypeId: 'k1', borrower: 'Juan Pérez', purpose: 'Entregar a cliente', 
-                    checkoutDate: now.toISOString(), returnDate: null, status: 'pending', selectedImage: null
+                    checkoutDate: new Date().toISOString(), returnDate: null, status: 'pending', selectedImage: null
                 },
                 { 
                     id: 'r2', keyTypeId: 'k2', borrower: 'Taller Mecánico', purpose: 'Mantenimiento', 
-                    checkoutDate: yesterday.toISOString(), returnDate: null, status: 'pending', selectedImage: null
+                    checkoutDate: new Date(Date.now() - 86400000).toISOString(), returnDate: null, status: 'pending', selectedImage: null
                 },
                 { 
                     id: 'r3', keyTypeId: 'k1', borrower: 'Carlos López', purpose: 'Prueba de manejo', 
-                    checkoutDate: fourDaysAgo.toISOString(), returnDate: null, status: 'pending', selectedImage: null
+                    checkoutDate: new Date(Date.now() - 345600000).toISOString(), returnDate: null, status: 'pending', selectedImage: null
                 },
                 { 
                     id: 'r4', keyTypeId: 'k3', borrower: 'Ana de Limpieza', purpose: 'Aseo matutino', 
-                    checkoutDate: yesterday.toISOString(), returnDate: now.toISOString(), status: 'returned', selectedImage: null
+                    checkoutDate: new Date(Date.now() - 86400000).toISOString(), returnDate: new Date().toISOString(), status: 'returned', selectedImage: null
                 }
             ];
-            saveData(); // Guardamos los datos iniciales
+
+            for (const key of defaultKeys) {
+                const keyDoc = doc(db, 'artifacts', appId, 'public', 'data', 'keyTypes', key.id);
+                await setDoc(keyDoc, { name: key.name, total: key.total, icon: key.icon, images: key.images });
+            }
+
+            for (const rec of defaultRecords) {
+                const recDoc = doc(db, 'artifacts', appId, 'public', 'data', 'records', rec.id);
+                await setDoc(recDoc, { 
+                    keyTypeId: rec.keyTypeId, borrower: rec.borrower, purpose: rec.purpose, 
+                    checkoutDate: rec.checkoutDate, returnDate: rec.returnDate, status: rec.status, selectedImage: rec.selectedImage 
+                });
+            }
+
+            localStorage.setItem(`controlLlaves_seeded_${appId}`, 'true');
         }
 
-        let pendingActionId = null;
-        let pendingDeleteKeyId = null; // Nuevo estado para eliminar tipos de llave
+        // --- ESCUCHADORES EN TIEMPO REAL (REALTIME SYNC) ---
+        function setupRealtimeListeners() {
+            if (!useFirebase || !auth.currentUser) {
+                // Modo Fallback LocalStorage si no hay Firebase configurado
+                loadLocalBackup();
+                renderAll();
+                return;
+            }
 
-        // --- FUNCIONES DE UTILIDAD ---
+            // Listener de Tipos de Llaves con Callback de Error obligatorio
+            onSnapshot(keyTypesColRef, (snapshot) => {
+                keyTypes = [];
+                snapshot.forEach(doc => {
+                    keyTypes.push({ id: doc.id, ...doc.data() });
+                });
+
+                // Si está vacío y nunca se ha sembrado, sembramos de forma asíncrona
+                if (keyTypes.length === 0 && !localStorage.getItem(`controlLlaves_seeded_${appId}`)) {
+                    seedFirebaseDatabase();
+                } else {
+                    renderAll();
+                }
+            }, (error) => {
+                console.error("Firestore onSnapshot keys error: ", error);
+            });
+
+            // Listener de Préstamos con Callback de Error obligatorio
+            onSnapshot(recordsColRef, (snapshot) => {
+                records = [];
+                snapshot.forEach(doc => {
+                    records.push({ id: doc.id, ...doc.data() });
+                });
+                renderAll();
+            }, (error) => {
+                console.error("Firestore onSnapshot records error: ", error);
+            });
+        }
+
+        // Respaldos locales antiguos si no hay conexión
+        function loadLocalBackup() {
+            const savedKeyTypes = localStorage.getItem('controlLlaves_keyTypes');
+            const savedRecords = localStorage.getItem('controlLlaves_records');
+            if (savedKeyTypes && savedRecords) {
+                keyTypes = JSON.parse(savedKeyTypes);
+                records = JSON.parse(savedRecords);
+            } else {
+                // Cargar datos por defecto offline
+                keyTypes = [
+                    { id: 'k1', name: 'Toyota (Camionetas)', total: 11, icon: 'ph-car', images: [] },
+                    { id: 'k2', name: 'Hangcha (Montacargas)', total: 5, icon: 'ph-tractor', images: [] },
+                    { id: 'k3', name: 'Oficina Principal', total: 2, icon: 'ph-house', images: [] }
+                ];
+                records = [
+                    { 
+                        id: 'r1', keyTypeId: 'k1', borrower: 'Juan Pérez', purpose: 'Entregar a cliente', 
+                        checkoutDate: new Date().toISOString(), returnDate: null, status: 'pending', selectedImage: null
+                    }
+                ];
+                saveLocalData();
+            }
+        }
+
+        function saveLocalData() {
+            if (!useFirebase) {
+                localStorage.setItem('controlLlaves_keyTypes', JSON.stringify(keyTypes));
+                localStorage.setItem('controlLlaves_records', JSON.stringify(records));
+            }
+        }
+
+        // --- FUNCIONES DE UTILIDAD (SIN CAMBIOS VISUALES) ---
         function calculateDays(dateString) {
             const date = new Date(dateString);
             const today = new Date();
-            // Normalizar a media noche para contar días completos
             date.setHours(0, 0, 0, 0);
             today.setHours(0, 0, 0, 0);
             const diffTime = Math.abs(today - date);
@@ -425,7 +533,6 @@
                 previewContainer.classList.remove('hidden');
             }
 
-            // Procesar cada archivo seleccionado
             Array.from(files).forEach(file => {
                 if (!file.type.startsWith('image/')) return;
 
@@ -434,7 +541,6 @@
                     const base64Image = e.target.result;
                     uploadedImages.push(base64Image);
                     
-                    // Crear elemento de previsualización
                     const imgContainer = document.createElement('div');
                     imgContainer.className = 'relative shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-gray-200';
                     
@@ -442,15 +548,12 @@
                     img.src = base64Image;
                     img.className = 'w-full h-full object-cover';
                     
-                    // Botón para eliminar la imagen antes de guardar
                     const deleteBtn = document.createElement('button');
                     deleteBtn.className = 'absolute top-1 right-1 bg-white rounded-full p-0.5 text-red-500 hover:bg-red-100';
                     deleteBtn.innerHTML = '<i class="ph-fill ph-x-circle"></i>';
                     deleteBtn.onclick = () => {
-                        // Remover del array
                         const index = uploadedImages.indexOf(base64Image);
                         if (index > -1) uploadedImages.splice(index, 1);
-                        // Remover del DOM
                         imgContainer.remove();
                         if (uploadedImages.length === 0) previewContainer.classList.add('hidden');
                     };
@@ -461,19 +564,13 @@
                 };
                 reader.readAsDataURL(file);
             });
-            
-            // Limpiar el input para permitir seleccionar la misma imagen si se borró
             event.target.value = '';
         }
 
         function selectImageToLend(imgSrc, element) {
             selectedImageToLend = imgSrc;
-            
-            // Quitar clase 'selected' de todas las imágenes
             const allImages = document.querySelectorAll('#lendImagesGrid .image-option');
             allImages.forEach(img => img.classList.remove('selected'));
-            
-            // Añadir clase 'selected' a la clickeada
             element.classList.add('selected');
         }
 
@@ -484,7 +581,6 @@
             const grid = document.getElementById('lendImagesGrid');
             const noImagesMsg = document.getElementById('lendNoImagesMsg');
             
-            // Resetear estado
             selectedImageToLend = null;
             grid.innerHTML = '';
             
@@ -497,19 +593,17 @@
             container.classList.remove('hidden');
 
             if (keyType && keyType.images && keyType.images.length > 0) {
-                // LÓGICA NUEVA: Obtener las imágenes que YA están prestadas (status: 'pending') para este tipo de llave
                 const currentlyLentImages = records
                     .filter(r => r.status === 'pending' && r.keyTypeId === keyTypeId && r.selectedImage)
                     .map(r => r.selectedImage);
 
-                // LÓGICA NUEVA: Filtrar las imágenes del tipo de llave, quitando las que ya están prestadas
                 const availableImagesToLend = keyType.images.filter(imgSrc => !currentlyLentImages.includes(imgSrc));
 
                 if (availableImagesToLend.length > 0) {
                     noImagesMsg.classList.add('hidden');
                     grid.classList.remove('hidden');
                     
-                    availableImagesToLend.forEach((imgSrc, index) => {
+                    availableImagesToLend.forEach((imgSrc) => {
                         const imgWrapper = document.createElement('div');
                         imgWrapper.className = 'shrink-0 w-24 h-24 rounded-lg overflow-hidden image-option bg-gray-100 flex items-center justify-center border-2 border-transparent transition-all cursor-pointer';
                         imgWrapper.onclick = () => selectImageToLend(imgSrc, imgWrapper);
@@ -522,31 +616,24 @@
                         grid.appendChild(imgWrapper);
                     });
                 } else {
-                    // Si hay imágenes, pero todas están prestadas
                     grid.classList.add('hidden');
                     noImagesMsg.classList.remove('hidden');
                     noImagesMsg.innerText = "Todas las imágenes específicas de esta llave están en préstamo actualmente.";
                 }
             } else {
-                // Si no hay imágenes configuradas para este tipo de llave
                 grid.classList.add('hidden');
                 noImagesMsg.classList.remove('hidden');
                 noImagesMsg.innerText = "No se subieron imágenes al crear este tipo de llave.";
             }
         }
 
-
-        // --- CONTROL DE UI (Tabs y Modales) ---
+        // --- CONTROL DE UI ---
         function switchTab(tabName) {
-            // Ocultar todas las vistas
             document.getElementById('view-pendientes').classList.add('hidden');
             document.getElementById('view-inventario').classList.add('hidden');
             document.getElementById('view-historial').classList.add('hidden');
-            
-            // Mostrar la seleccionada
             document.getElementById(`view-${tabName}`).classList.remove('hidden');
 
-            // Actualizar colores de los botones
             const tabs = ['pendientes', 'inventario', 'historial'];
             tabs.forEach(t => {
                 const el = document.getElementById(`tab-${t}`);
@@ -558,15 +645,12 @@
                     el.classList.add('tab-inactive');
                 }
             });
-
-            // Re-renderizar datos por si hubo cambios
             renderAll();
         }
 
         function openModal(id) {
             const modal = document.getElementById(id);
             modal.classList.remove('hidden');
-            // Pequeño delay para la animación
             setTimeout(() => {
                 modal.children[0].classList.add('modal-enter-active');
                 modal.children[0].classList.remove('modal-enter');
@@ -574,7 +658,6 @@
 
             if (id === 'addKeyModal') {
                 renderIconSelector();
-                // Limpiar estado de imágenes previas
                 uploadedImages = [];
                 const previewContainer = document.getElementById('imagePreviewContainer');
                 previewContainer.innerHTML = '';
@@ -592,7 +675,6 @@
         }
 
         function showMessage(title, desc) {
-            // Un reemplazo simple visual para un alert informativo
             document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-blue-100 text-blue-600';
             document.getElementById('actionIcon').innerHTML = '<i class="ph ph-info"></i>';
             document.getElementById('actionTitle').innerText = title;
@@ -600,17 +682,15 @@
             document.getElementById('actionConfirmBtn').className = 'flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl transition';
             document.getElementById('actionConfirmBtn').onclick = () => closeModal('actionModal');
             document.getElementById('actionConfirmBtn').innerText = 'Entendido';
-            
             openModal('actionModal');
         }
 
-        // --- RENDERIZADO DE DATOS ---
+        // --- RENDERIZADO DE VISTAS (IDÉNTICO EN ESTILO) ---
         function renderPendientes() {
             const container = document.getElementById('pendientes-list');
             container.innerHTML = '';
             
             const pendingRecords = records.filter(r => r.status === 'pending');
-            // Ordenar por fecha (los más viejos primero para ver los retrasos)
             pendingRecords.sort((a, b) => new Date(a.checkoutDate) - new Date(b.checkoutDate));
 
             if (pendingRecords.length === 0) {
@@ -629,7 +709,6 @@
                 const style = getStatusStyling(record.checkoutDate);
                 const daysText = getDaysText(calculateDays(record.checkoutDate));
 
-                // Determinar qué mostrar a la izquierda: la imagen seleccionada o el ícono
                 let visualElementHtml = '';
                 if (record.selectedImage) {
                     visualElementHtml = `
@@ -693,9 +772,7 @@
 
             keyTypes.forEach(keyType => {
                 const available = getAvailableCount(keyType.id);
-                const outCount = keyType.total - available;
                 
-                // Generar pequeñas miniaturas de las imágenes guardadas, máximo 3
                 let imagesHtml = '';
                 if (keyType.images && keyType.images.length > 0) {
                     const displayImages = keyType.images.slice(0, 3);
@@ -739,7 +816,6 @@
             container.innerHTML = '';
             
             const historyRecords = records.filter(r => r.status !== 'pending');
-            // Ordenar por fecha de devolución (más recientes primero)
             historyRecords.sort((a, b) => new Date(b.returnDate) - new Date(a.returnDate));
 
             if (historyRecords.length === 0) {
@@ -805,13 +881,14 @@
                 btn.innerHTML = `<i class="ph ${icon}"></i>`;
                 btn.onclick = () => {
                     selectedIcon = icon;
-                    renderIconSelector(); // Re-render para actualizar el visual seleccionado
+                    renderIconSelector();
                 };
                 container.appendChild(btn);
             });
         }
 
-        function saveNewKey() {
+        // Guardado de llaves integrado a Firestore
+        async function saveNewKey() {
             const name = document.getElementById('newKeyName').value.trim();
             const total = parseInt(document.getElementById('newKeyTotal').value);
 
@@ -821,21 +898,28 @@
             }
 
             const newId = 'k' + Date.now();
-            
-            // Hacemos una copia de las imágenes subidas para asignarlas a este registro
             const imagesToSave = [...uploadedImages];
 
-            keyTypes.push({
-                id: newId,
+            const keyData = {
                 name: name,
                 total: total,
                 icon: selectedIcon,
                 images: imagesToSave
-            });
+            };
 
-            saveData(); // Guardar cambios
+            if (useFirebase && auth.currentUser) {
+                try {
+                    const keyDoc = doc(db, 'artifacts', appId, 'public', 'data', 'keyTypes', newId);
+                    await setDoc(keyDoc, keyData);
+                } catch (err) {
+                    console.error("Error saving key to Firestore: ", err);
+                }
+            } else {
+                keyTypes.push({ id: newId, ...keyData });
+                saveLocalData();
+                renderAll();
+            }
 
-            // Limpiar formulario
             document.getElementById('newKeyName').value = '';
             document.getElementById('newKeyTotal').value = '';
             uploadedImages = [];
@@ -843,14 +927,12 @@
             document.getElementById('imagePreviewContainer').classList.add('hidden');
             
             closeModal('addKeyModal');
-            renderAll();
         }
 
         function openLendModal() {
             const select = document.getElementById('lendKeySelect');
             select.innerHTML = '<option value="">-- Selecciona una categoría --</option>';
             
-            // Llenar opciones solo con las que tienen disponibles
             let hasAvailable = false;
             keyTypes.forEach(keyType => {
                 const available = getAvailableCount(keyType.id);
@@ -865,14 +947,13 @@
                 return;
             }
 
-            // Resetear UI de imágenes
             document.getElementById('lendImageSelectionContainer').classList.add('hidden');
             selectedImageToLend = null;
-
             openModal('lendKeyModal');
         }
 
-        function saveLoan() {
+        // Guardado de préstamos integrado a Firestore
+        async function saveLoan() {
             const keyTypeId = document.getElementById('lendKeySelect').value;
             const borrower = document.getElementById('lendBorrower').value.trim();
             const purpose = document.getElementById('lendPurpose').value.trim();
@@ -882,22 +963,30 @@
                 return;
             }
 
+            const newId = 'r' + Date.now();
             const newRecord = {
-                id: 'r' + Date.now(),
                 keyTypeId: keyTypeId,
                 borrower: borrower,
                 purpose: purpose,
                 checkoutDate: new Date().toISOString(),
                 returnDate: null,
                 status: 'pending',
-                selectedImage: selectedImageToLend // Guardamos la imagen seleccionada, puede ser null
+                selectedImage: selectedImageToLend
             };
 
-            records.push(newRecord);
+            if (useFirebase && auth.currentUser) {
+                try {
+                    const recDoc = doc(db, 'artifacts', appId, 'public', 'data', 'records', newId);
+                    await setDoc(recDoc, newRecord);
+                } catch (err) {
+                    console.error("Error saving record to Firestore: ", err);
+                }
+            } else {
+                records.push({ id: newId, ...newRecord });
+                saveLocalData();
+                renderAll();
+            }
 
-            saveData(); // Guardar cambios
-
-            // Limpiar form
             document.getElementById('lendKeySelect').value = '';
             document.getElementById('lendBorrower').value = '';
             document.getElementById('lendPurpose').value = '';
@@ -905,7 +994,7 @@
             selectedImageToLend = null;
             
             closeModal('lendKeyModal');
-            switchTab('pendientes'); // Ir a la vista principal
+            switchTab('pendientes');
         }
 
         function promptReturn(recordId) {
@@ -944,23 +1033,36 @@
             openModal('actionModal');
         }
 
-        function confirmAction(status) {
+        // Confirmación de estado de préstamo en Firestore
+        async function confirmAction(status) {
             const recordIndex = records.findIndex(r => r.id === pendingActionId);
             if (recordIndex !== -1) {
-                records[recordIndex].status = status;
-                records[recordIndex].returnDate = new Date().toISOString();
-                saveData(); // Guardar cambios
+                const nowStr = new Date().toISOString();
+                
+                if (useFirebase && auth.currentUser) {
+                    try {
+                        const recDoc = doc(db, 'artifacts', appId, 'public', 'data', 'records', pendingActionId);
+                        await updateDoc(recDoc, {
+                            status: status,
+                            returnDate: nowStr
+                        });
+                    } catch (err) {
+                        console.error("Error updating record on Firestore: ", err);
+                    }
+                } else {
+                    records[recordIndex].status = status;
+                    records[recordIndex].returnDate = nowStr;
+                    saveLocalData();
+                    renderAll();
+                }
             }
             closeModal('actionModal');
-            renderAll();
             pendingActionId = null;
         }
 
         function promptDeleteKey(keyTypeId) {
             pendingDeleteKeyId = keyTypeId;
             const keyType = keyTypes.find(k => k.id === keyTypeId);
-            
-            // Verificar si hay llaves pendientes de este tipo
             const hasPending = records.some(r => r.keyTypeId === keyTypeId && r.status === 'pending');
             
             if (hasPending) {
@@ -982,19 +1084,27 @@
             openModal('actionModal');
         }
 
-        function confirmDeleteKey() {
+        // Eliminación del tipo de llave en Firestore
+        async function confirmDeleteKey() {
             if (pendingDeleteKeyId) {
-                // Filtrar el tipo de llave para eliminarlo
-                keyTypes = keyTypes.filter(k => k.id !== pendingDeleteKeyId);
-                saveData(); // Guardar cambios
+                if (useFirebase && auth.currentUser) {
+                    try {
+                        const keyDoc = doc(db, 'artifacts', appId, 'public', 'data', 'keyTypes', pendingDeleteKeyId);
+                        await deleteDoc(keyDoc);
+                    } catch (err) {
+                        console.error("Error deleting key from Firestore: ", err);
+                    }
+                } else {
+                    keyTypes = keyTypes.filter(k => k.id !== pendingDeleteKeyId);
+                    saveLocalData();
+                    renderAll();
+                }
             }
             closeModal('actionModal');
-            renderAll();
             pendingDeleteKeyId = null;
         }
 
         // --- INTEGRACIÓN CON GEMINI API ---
-        
         async function callGeminiAPI(prompt, systemPrompt = "") {
             const apiKey = ""; // API Key proveída por el entorno Canvas
             const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
@@ -1051,10 +1161,10 @@
             const suggestedIcon = await callGeminiAPI(prompt, systemPrompt);
 
             if (suggestedIcon) {
-                const cleanIcon = suggestedIcon.trim().replace(/['"`]/g, ''); // Limpiar cualquier formato residual
+                const cleanIcon = suggestedIcon.trim().replace(/['"`]/g, '');
                 if (iconOptions.includes(cleanIcon)) {
                     selectedIcon = cleanIcon;
-                    renderIconSelector(); // Actualizar la UI visualmente
+                    renderIconSelector();
                 } else {
                     console.warn("La IA devolvió un ícono no válido:", cleanIcon);
                 }
@@ -1067,7 +1177,6 @@
         }
 
         async function generateInsights() {
-            // Preparar el estado actual de los datos para enviárselos a la IA
             const pendingLoans = records.filter(r => r.status === 'pending').map(r => {
                 const kt = keyTypes.find(k => k.id === r.keyTypeId);
                 return {
@@ -1089,7 +1198,6 @@
                 estado_general_inventario: inventoryState
             };
 
-            // Preparar la Interfaz (Mostrar modal de carga)
             document.getElementById('aiInsightsContent').classList.add('hidden');
             document.getElementById('aiLoadingState').classList.remove('hidden');
             openModal('aiInsightsModal');
@@ -1119,7 +1227,6 @@
             contentDiv.classList.remove('hidden');
 
             if (aiResponse) {
-                // Eliminar posibles backticks residuales de markdown si el modelo no sigue la instrucción estricta
                 const cleanHTML = aiResponse.replace(/```html/g, '').replace(/```/g, '').trim();
                 contentDiv.innerHTML = cleanHTML;
             } else {
@@ -1131,11 +1238,33 @@
             }
         }
 
-        // --- INICIALIZACIÓN ---
-        window.onload = () => {
-            renderAll();
-        };
+        // --- PUBLICAR MÉTODOS AL ÁMBITO GLOBAL ---
+        // Al usar script type="module", es indispensable exportar las funciones
+        // al objeto "window" para que los "onclick" del HTML puedan encontrarlas.
+        window.switchTab = switchTab;
+        window.openModal = openModal;
+        window.closeModal = closeModal;
+        window.showMessage = showMessage;
+        window.openImageViewer = openImageViewer;
+        window.handleImageUpload = handleImageUpload;
+        window.selectImageToLend = selectImageToLend;
+        window.loadImagesForSelectedKey = loadImagesForSelectedKey;
+        window.saveNewKey = saveNewKey;
+        window.openLendModal = openLendModal;
+        window.saveLoan = saveLoan;
+        window.promptReturn = promptReturn;
+        window.promptLost = promptLost;
+        window.confirmAction = confirmAction;
+        window.promptDeleteKey = promptDeleteKey;
+        window.confirmDeleteKey = confirmDeleteKey;
+        window.suggestIconWithAI = suggestIconWithAI;
+        window.generateInsights = generateInsights;
 
+        // --- INICIALIZACIÓN ---
+        window.onload = async () => {
+            await authenticateFirebase();
+            setupRealtimeListeners();
+        };
     </script>
 </body>
 </html>
