@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Control de Llaves</title>
+    <!-- Tailwind CSS para el diseño -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Phosphor Icons para los íconos de las llaves y la interfaz -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <!-- Fuente Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6; /* Gray-100 */
+            -webkit-tap-highlight-color: transparent;
+        }
+        .modal-enter {
+            opacity: 0;
+            transform: scale(0.95) translateY(10px);
+        }
+        .modal-enter-active {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            transition: opacity 300ms, transform 300ms cubic-bezier(0.18, 0.89, 0.32, 1.28);
+        }
+        /* Ocultar barra de desplazamiento pero permitir scroll */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+        .tab-active {
+            color: #4f46e5; /* Indigo 600 */
+        }
+        .tab-inactive {
+            color: #9ca3af; /* Gray 400 */
+        }
+        /* Estilos para selección de imágenes */
+        .image-option {
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s ease;
+        }
+        .image-option.selected {
+            border-color: #4f46e5;
+            transform: scale(1.05);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+        }
+    </style>
+</head>
+<body class="text-gray-800 antialiased h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-indigo-600 text-white p-4 shadow-md flex justify-between items-center shrink-0 z-10 relative">
+        <div class="flex items-center gap-2">
+            <i class="ph-fill ph-key text-2xl"></i>
+            <h1 class="text-xl font-bold">Control de Llaves</h1>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="generateInsights()" class="bg-purple-500 hover:bg-purple-400 p-2 rounded-full transition flex items-center justify-center shadow-sm" title="Resumen con IA">
+                <i class="ph-fill ph-magic-wand text-xl"></i>
+            </button>
+            <button onclick="openModal('addKeyModal')" class="bg-white/20 hover:bg-white/30 p-2 rounded-full transition">
+                <i class="ph ph-plus text-xl"></i>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main id="main-content" class="flex-1 overflow-y-auto no-scrollbar p-4 pb-24 bg-gray-50 relative">
+        
+        <!-- View 1: Pendientes (Active Loans) -->
+        <section id="view-pendientes" class="space-y-4">
+            <div class="flex justify-between items-end mb-2">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-800">Llaves Pendientes</h2>
+                    <p class="text-sm text-gray-500">Llaves que están fuera actualmente</p>
+                </div>
+            </div>
+            <div id="pendientes-list" class="space-y-3">
+                <!-- Se llena con JS -->
+            </div>
+        </section>
+
+        <!-- View 2: Inventario (Keys Master List) -->
+        <section id="view-inventario" class="space-y-4 hidden">
+            <div class="flex justify-between items-end mb-2">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-800">Inventario de Llaves</h2>
+                    <p class="text-sm text-gray-500">Totales y disponibilidad</p>
+                </div>
+            </div>
+            <div id="inventario-list" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Se llena con JS -->
+            </div>
+        </section>
+
+        <!-- View 3: Historial (History) -->
+        <section id="view-historial" class="space-y-4 hidden">
+            <div class="flex justify-between items-end mb-2">
+                <div>
+                    <h2 class="text-lg font-bold text-gray-800">Historial</h2>
+                    <p class="text-sm text-gray-500">Llaves devueltas o extraviadas</p>
+                </div>
+            </div>
+            <div id="historial-list" class="space-y-3">
+                <!-- Se llena con JS -->
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Floating Action Button for Lending -->
+    <button onclick="openLendModal()" class="fixed bottom-20 right-4 bg-indigo-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-indigo-700 transition transform hover:scale-105 z-20">
+        <i class="ph ph-hand-coins text-2xl"></i>
+    </button>
+
+    <!-- Bottom Navigation -->
+    <nav class="bg-white border-t border-gray-200 flex justify-around p-3 pb-safe shrink-0 shadow-[0_-2px_10px_rgba(0,0,0,0.05)] z-20">
+        <button onclick="switchTab('pendientes')" id="tab-pendientes" class="tab-active flex flex-col items-center gap-1 w-1/3 transition-colors">
+            <i class="ph-fill ph-clock text-2xl"></i>
+            <span class="text-xs font-medium">Pendientes</span>
+        </button>
+        <button onclick="switchTab('inventario')" id="tab-inventario" class="tab-inactive flex flex-col items-center gap-1 w-1/3 transition-colors">
+            <i class="ph-fill ph-rows text-2xl"></i>
+            <span class="text-xs font-medium">Inventario</span>
+        </button>
+        <button onclick="switchTab('historial')" id="tab-historial" class="tab-inactive flex flex-col items-center gap-1 w-1/3 transition-colors">
+            <i class="ph-fill ph-clock-counter-clockwise text-2xl"></i>
+            <span class="text-xs font-medium">Historial</span>
+        </button>
+    </nav>
+
+    <!-- MODAL: Agregar Nueva Llave -->
+    <div id="addKeyModal" class="fixed inset-0 bg-black/50 z-50 hidden flex flex-col justify-end sm:justify-center items-center">
+        <div class="bg-white w-full sm:w-[32rem] max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl transform transition-transform">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Agregar Tipo de Llave</h3>
+                <button onclick="closeModal('addKeyModal')" class="text-gray-400 hover:text-gray-600 bg-gray-100 p-2 rounded-full">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre o Marca (Ej: Toyota)</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="newKeyName" class="flex-1 w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Marca o descripción">
+                        <button onclick="suggestIconWithAI()" id="btnSuggestIcon" class="bg-purple-100 text-purple-700 hover:bg-purple-200 px-3 rounded-xl transition flex items-center justify-center gap-1 font-medium text-sm whitespace-nowrap border border-purple-200 shadow-sm">
+                            <i class="ph-fill ph-sparkle"></i> Ícono IA
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad Total</label>
+                    <input type="number" id="newKeyTotal" class="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Ej: 11" min="1">
+                </div>
+                
+                <!-- Sección para subir imágenes -->
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Imágenes de las llaves</label>
+                    <div class="flex items-center justify-center w-full">
+                        <label for="newKeyImages" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100">
+                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                <i class="ph ph-upload-simple text-3xl text-gray-400 mb-2"></i>
+                                <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Haz clic para subir</span> o arrastra</p>
+                                <p class="text-xs text-gray-500">PNG, JPG o GIF</p>
+                            </div>
+                            <input id="newKeyImages" type="file" class="hidden" multiple accept="image/*" onchange="handleImageUpload(event)" />
+                        </label>
+                    </div>
+                    <!-- Contenedor para previsualizar las imágenes subidas -->
+                    <div id="imagePreviewContainer" class="flex overflow-x-auto gap-2 mt-3 py-2 hidden">
+                        <!-- JS fills previews -->
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Selecciona un Ícono (Opcional)</label>
+                    <div class="grid grid-cols-4 sm:grid-cols-8 gap-2" id="icon-selector">
+                        <!-- JS fills icons -->
+                    </div>
+                </div>
+                <button onclick="saveNewKey()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl mt-4 hover:bg-indigo-700 transition">
+                    Guardar Llave
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Resumen IA -->
+    <div id="aiInsightsModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex flex-col justify-end sm:justify-center items-center p-4">
+        <div class="bg-white w-full sm:w-[32rem] max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl transform transition-transform">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold flex items-center gap-2 text-purple-700">
+                    <i class="ph-fill ph-magic-wand"></i> Resumen de Inventario IA
+                </h3>
+                <button onclick="closeModal('aiInsightsModal')" class="text-gray-400 hover:text-gray-600 bg-gray-100 p-2 rounded-full">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <div id="aiLoadingState" class="py-10 flex flex-col items-center justify-center text-center hidden">
+                <i class="ph ph-spinner-gap text-5xl text-purple-500 animate-spin mb-4"></i>
+                <p class="text-gray-700 font-medium text-lg">Analizando datos...</p>
+                <p class="text-sm text-gray-500 mt-1">Generando insights estratégicos con Gemini AI.</p>
+            </div>
+            <div id="aiInsightsContent" class="space-y-4 text-gray-700 leading-relaxed text-sm bg-purple-50/50 p-4 rounded-xl border border-purple-100">
+                <!-- Contenido de IA se inyecta aquí -->
+            </div>
+            <button onclick="closeModal('aiInsightsModal')" class="w-full bg-gray-100 text-gray-800 font-bold py-3 rounded-xl mt-6 hover:bg-gray-200 transition">
+                Cerrar Resumen
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL: Prestar Llave (NUEVO MODAL QUE FALTABA) -->
+    <div id="lendKeyModal" class="fixed inset-0 bg-black/50 z-50 hidden flex flex-col justify-end sm:justify-center items-center p-4">
+        <div class="bg-white w-full sm:w-[32rem] max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl transform transition-transform">
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-xl font-bold flex items-center gap-2 text-indigo-700">
+                    <i class="ph-fill ph-hand-coins"></i> Registrar Préstamo
+                </h3>
+                <button onclick="closeModal('lendKeyModal')" class="text-gray-400 hover:text-gray-600 bg-gray-100 p-2 rounded-full transition">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <div class="space-y-5">
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">¿Qué llave vas a prestar?</label>
+                    <select id="lendKeySelect" onchange="loadImagesForSelectedKey()" class="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none bg-white shadow-sm appearance-none cursor-pointer">
+                        <!-- Opciones llenadas por JS -->
+                    </select>
+                </div>
+
+                <div id="lendImageSelectionContainer" class="hidden">
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Selecciona la llave específica <span class="text-xs font-normal text-gray-500">(Opcional)</span></label>
+                    <div id="lendImagesGrid" class="flex overflow-x-auto gap-3 pb-2 pt-1 no-scrollbar hidden">
+                        <!-- Opciones de imágenes llenadas por JS -->
+                    </div>
+                    <p id="lendNoImagesMsg" class="text-sm text-gray-500 italic bg-gray-50 p-3 rounded-xl border border-gray-100 hidden">
+                        No hay imágenes disponibles para seleccionar en esta categoría o todas están prestadas actualmente.
+                    </p>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">¿A quién se la prestas?</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="ph ph-user text-gray-400"></i>
+                        </div>
+                        <input type="text" id="lendBorrower" class="w-full pl-10 border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-sm" placeholder="Nombre completo o departamento">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Motivo o Destino</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="ph ph-target text-gray-400"></i>
+                        </div>
+                        <input type="text" id="lendPurpose" class="w-full pl-10 border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-sm" placeholder="Ej: Mantenimiento, visita, etc.">
+                    </div>
+                </div>
+
+                <button onclick="saveLoan()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl mt-6 hover:bg-indigo-700 transition flex items-center justify-center gap-2 shadow-md">
+                    <i class="ph-bold ph-check"></i> Confirmar Préstamo
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Custom Confirm/Action -->
+    <div id="actionModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex flex-col justify-center items-center p-4">
+        <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center">
+            <div id="actionIcon" class="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl"></div>
+            <h3 id="actionTitle" class="text-xl font-bold mb-2">Título</h3>
+            <p id="actionDesc" class="text-gray-600 mb-6 text-sm">Descripción del contexto.</p>
+            
+            <div class="flex gap-3">
+                <button onclick="closeModal('actionModal')" class="flex-1 bg-gray-200 text-gray-800 font-bold py-3 rounded-xl hover:bg-gray-300 transition">
+                    Cancelar
+                </button>
+                <button id="actionConfirmBtn" class="flex-1 text-white font-bold py-3 rounded-xl transition">
+                    Confirmar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Image Viewer (Visor de Imágenes) -->
+    <div id="imageViewerModal" class="fixed inset-0 bg-black/90 z-[70] hidden flex flex-col justify-center items-center" onclick="closeModal('imageViewerModal')">
+        <button onclick="closeModal('imageViewerModal')" class="absolute top-6 right-6 text-white/70 hover:text-white bg-black/50 p-3 rounded-full backdrop-blur-sm transition z-[71]">
+            <i class="ph ph-x text-2xl"></i>
+        </button>
+        <div class="w-full h-full max-w-4xl p-4 flex items-center justify-center relative" onclick="event.stopPropagation()">
+            <img id="viewerImage" src="" class="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl transition-transform duration-300" alt="Vista previa completa">
+        </div>
+        <p class="absolute bottom-6 text-white/50 text-sm">Toca fuera de la imagen para cerrar</p>
+    </div>
+
+    <script>
+        // --- ESTADO DE LA APLICACIÓN (In-Memory -> LocalStorage) ---
+        
+        // Íconos disponibles para elegir
+        const iconOptions = ['ph-car', 'ph-jeep', 'ph-tractor', 'ph-house', 'ph-lock-key', 'ph-truck', 'ph-motorcycle', 'ph-star'];
+        let selectedIcon = 'ph-car';
+        
+        // Variables para gestionar imágenes durante la creación/préstamo
+        let uploadedImages = []; // Array de base64 para la llave nueva
+        let selectedImageToLend = null; // URL de la imagen seleccionada al prestar
+
+        // Funciones para guardar y cargar datos de LocalStorage
+        function saveData() {
+            localStorage.setItem('controlLlaves_keyTypes', JSON.stringify(keyTypes));
+            localStorage.setItem('controlLlaves_records', JSON.stringify(records));
+        }
+
+        function loadData() {
+            const savedKeyTypes = localStorage.getItem('controlLlaves_keyTypes');
+            const savedRecords = localStorage.getItem('controlLlaves_records');
+            
+            if (savedKeyTypes && savedRecords) {
+                keyTypes = JSON.parse(savedKeyTypes);
+                records = JSON.parse(savedRecords);
+                return true;
+            }
+            return false;
+        }
+
+        // Datos iniciales
+        let keyTypes = [];
+        let records = [];
+
+        // Simulamos fechas para ver los colores (solo se usan si no hay datos en LocalStorage)
+        const now = new Date();
+        const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+        const fourDaysAgo = new Date(now); fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
+
+        // Si no hay datos guardados, cargamos los de ejemplo
+        if (!loadData()) {
+            keyTypes = [
+                { id: 'k1', name: 'Toyota (Camionetas)', total: 11, icon: 'ph-car', images: [] },
+                { id: 'k2', name: 'Hangcha (Montacargas)', total: 5, icon: 'ph-tractor', images: [] },
+                { id: 'k3', name: 'Oficina Principal', total: 2, icon: 'ph-house', images: [] }
+            ];
+
+            records = [
+                { 
+                    id: 'r1', keyTypeId: 'k1', borrower: 'Juan Pérez', purpose: 'Entregar a cliente', 
+                    checkoutDate: now.toISOString(), returnDate: null, status: 'pending', selectedImage: null
+                },
+                { 
+                    id: 'r2', keyTypeId: 'k2', borrower: 'Taller Mecánico', purpose: 'Mantenimiento', 
+                    checkoutDate: yesterday.toISOString(), returnDate: null, status: 'pending', selectedImage: null
+                },
+                { 
+                    id: 'r3', keyTypeId: 'k1', borrower: 'Carlos López', purpose: 'Prueba de manejo', 
+                    checkoutDate: fourDaysAgo.toISOString(), returnDate: null, status: 'pending', selectedImage: null
+                },
+                { 
+                    id: 'r4', keyTypeId: 'k3', borrower: 'Ana de Limpieza', purpose: 'Aseo matutino', 
+                    checkoutDate: yesterday.toISOString(), returnDate: now.toISOString(), status: 'returned', selectedImage: null
+                }
+            ];
+            saveData(); // Guardamos los datos iniciales
+        }
+
+        let pendingActionId = null;
+        let pendingDeleteKeyId = null; // Nuevo estado para eliminar tipos de llave
+
+        // --- FUNCIONES DE UTILIDAD ---
+        function calculateDays(dateString) {
+            const date = new Date(dateString);
+            const today = new Date();
+            // Normalizar a media noche para contar días completos
+            date.setHours(0, 0, 0, 0);
+            today.setHours(0, 0, 0, 0);
+            const diffTime = Math.abs(today - date);
+            return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+        }
+
+        function getDaysText(days) {
+            if (days === 0) return 'Salió hoy';
+            if (days === 1) return 'Lleva 1 día';
+            return `Lleva ${days} días`;
+        }
+
+        function getStatusStyling(dateString) {
+            const days = calculateDays(dateString);
+            if (days === 0) return { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-200' };
+            if (days <= 2) return { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-200' };
+            return { bg: 'bg-rose-100', text: 'text-rose-700', border: 'border-rose-200' };
+        }
+
+        function formatDate(dateString) {
+            const options = { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' };
+            return new Date(dateString).toLocaleDateString('es-MX', options);
+        }
+
+        function getAvailableCount(keyTypeId) {
+            const keyType = keyTypes.find(k => k.id === keyTypeId);
+            if (!keyType) return 0;
+            const pendingCount = records.filter(r => r.keyTypeId === keyTypeId && r.status === 'pending').length;
+            return keyType.total - pendingCount;
+        }
+
+        function openImageViewer(imageSrc) {
+            if (!imageSrc) return;
+            const viewerImg = document.getElementById('viewerImage');
+            viewerImg.src = imageSrc;
+            openModal('imageViewerModal');
+        }
+
+        // --- MANEJO DE IMÁGENES ---
+        function handleImageUpload(event) {
+            const files = event.target.files;
+            const previewContainer = document.getElementById('imagePreviewContainer');
+            
+            if (files.length > 0) {
+                previewContainer.classList.remove('hidden');
+            }
+
+            // Procesar cada archivo seleccionado
+            Array.from(files).forEach(file => {
+                if (!file.type.startsWith('image/')) return;
+
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const base64Image = e.target.result;
+                    uploadedImages.push(base64Image);
+                    
+                    // Crear elemento de previsualización
+                    const imgContainer = document.createElement('div');
+                    imgContainer.className = 'relative shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-gray-200';
+                    
+                    const img = document.createElement('img');
+                    img.src = base64Image;
+                    img.className = 'w-full h-full object-cover';
+                    
+                    // Botón para eliminar la imagen antes de guardar
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'absolute top-1 right-1 bg-white rounded-full p-0.5 text-red-500 hover:bg-red-100';
+                    deleteBtn.innerHTML = '<i class="ph-fill ph-x-circle"></i>';
+                    deleteBtn.onclick = () => {
+                        // Remover del array
+                        const index = uploadedImages.indexOf(base64Image);
+                        if (index > -1) uploadedImages.splice(index, 1);
+                        // Remover del DOM
+                        imgContainer.remove();
+                        if (uploadedImages.length === 0) previewContainer.classList.add('hidden');
+                    };
+
+                    imgContainer.appendChild(img);
+                    imgContainer.appendChild(deleteBtn);
+                    previewContainer.appendChild(imgContainer);
+                };
+                reader.readAsDataURL(file);
+            });
+            
+            // Limpiar el input para permitir seleccionar la misma imagen si se borró
+            event.target.value = '';
+        }
+
+        function selectImageToLend(imgSrc, element) {
+            selectedImageToLend = imgSrc;
+            
+            // Quitar clase 'selected' de todas las imágenes
+            const allImages = document.querySelectorAll('#lendImagesGrid .image-option');
+            allImages.forEach(img => img.classList.remove('selected'));
+            
+            // Añadir clase 'selected' a la clickeada
+            element.classList.add('selected');
+        }
+
+        function loadImagesForSelectedKey() {
+            const select = document.getElementById('lendKeySelect');
+            const keyTypeId = select.value;
+            const container = document.getElementById('lendImageSelectionContainer');
+            const grid = document.getElementById('lendImagesGrid');
+            const noImagesMsg = document.getElementById('lendNoImagesMsg');
+            
+            // Resetear estado
+            selectedImageToLend = null;
+            grid.innerHTML = '';
+            
+            if (!keyTypeId) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            const keyType = keyTypes.find(k => k.id === keyTypeId);
+            container.classList.remove('hidden');
+
+            if (keyType && keyType.images && keyType.images.length > 0) {
+                // LÓGICA NUEVA: Obtener las imágenes que YA están prestadas (status: 'pending') para este tipo de llave
+                const currentlyLentImages = records
+                    .filter(r => r.status === 'pending' && r.keyTypeId === keyTypeId && r.selectedImage)
+                    .map(r => r.selectedImage);
+
+                // LÓGICA NUEVA: Filtrar las imágenes del tipo de llave, quitando las que ya están prestadas
+                const availableImagesToLend = keyType.images.filter(imgSrc => !currentlyLentImages.includes(imgSrc));
+
+                if (availableImagesToLend.length > 0) {
+                    noImagesMsg.classList.add('hidden');
+                    grid.classList.remove('hidden');
+                    
+                    availableImagesToLend.forEach((imgSrc, index) => {
+                        const imgWrapper = document.createElement('div');
+                        imgWrapper.className = 'shrink-0 w-24 h-24 rounded-lg overflow-hidden image-option bg-gray-100 flex items-center justify-center border-2 border-transparent transition-all cursor-pointer';
+                        imgWrapper.onclick = () => selectImageToLend(imgSrc, imgWrapper);
+                        
+                        const img = document.createElement('img');
+                        img.src = imgSrc;
+                        img.className = 'w-full h-full object-cover';
+                        
+                        imgWrapper.appendChild(img);
+                        grid.appendChild(imgWrapper);
+                    });
+                } else {
+                    // Si hay imágenes, pero todas están prestadas
+                    grid.classList.add('hidden');
+                    noImagesMsg.classList.remove('hidden');
+                    noImagesMsg.innerText = "Todas las imágenes específicas de esta llave están en préstamo actualmente.";
+                }
+            } else {
+                // Si no hay imágenes configuradas para este tipo de llave
+                grid.classList.add('hidden');
+                noImagesMsg.classList.remove('hidden');
+                noImagesMsg.innerText = "No se subieron imágenes al crear este tipo de llave.";
+            }
+        }
+
+
+        // --- CONTROL DE UI (Tabs y Modales) ---
+        function switchTab(tabName) {
+            // Ocultar todas las vistas
+            document.getElementById('view-pendientes').classList.add('hidden');
+            document.getElementById('view-inventario').classList.add('hidden');
+            document.getElementById('view-historial').classList.add('hidden');
+            
+            // Mostrar la seleccionada
+            document.getElementById(`view-${tabName}`).classList.remove('hidden');
+
+            // Actualizar colores de los botones
+            const tabs = ['pendientes', 'inventario', 'historial'];
+            tabs.forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                if (t === tabName) {
+                    el.classList.remove('tab-inactive');
+                    el.classList.add('tab-active');
+                } else {
+                    el.classList.remove('tab-active');
+                    el.classList.add('tab-inactive');
+                }
+            });
+
+            // Re-renderizar datos por si hubo cambios
+            renderAll();
+        }
+
+        function openModal(id) {
+            const modal = document.getElementById(id);
+            modal.classList.remove('hidden');
+            // Pequeño delay para la animación
+            setTimeout(() => {
+                modal.children[0].classList.add('modal-enter-active');
+                modal.children[0].classList.remove('modal-enter');
+            }, 10);
+
+            if (id === 'addKeyModal') {
+                renderIconSelector();
+                // Limpiar estado de imágenes previas
+                uploadedImages = [];
+                const previewContainer = document.getElementById('imagePreviewContainer');
+                previewContainer.innerHTML = '';
+                previewContainer.classList.add('hidden');
+            }
+        }
+
+        function closeModal(id) {
+            const modal = document.getElementById(id);
+            modal.children[0].classList.remove('modal-enter-active');
+            modal.children[0].classList.add('modal-enter');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+            }, 300);
+        }
+
+        function showMessage(title, desc) {
+            // Un reemplazo simple visual para un alert informativo
+            document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-blue-100 text-blue-600';
+            document.getElementById('actionIcon').innerHTML = '<i class="ph ph-info"></i>';
+            document.getElementById('actionTitle').innerText = title;
+            document.getElementById('actionDesc').innerText = desc;
+            document.getElementById('actionConfirmBtn').className = 'flex-1 bg-blue-600 text-white font-bold py-3 rounded-xl transition';
+            document.getElementById('actionConfirmBtn').onclick = () => closeModal('actionModal');
+            document.getElementById('actionConfirmBtn').innerText = 'Entendido';
+            
+            openModal('actionModal');
+        }
+
+        // --- RENDERIZADO DE DATOS ---
+        function renderPendientes() {
+            const container = document.getElementById('pendientes-list');
+            container.innerHTML = '';
+            
+            const pendingRecords = records.filter(r => r.status === 'pending');
+            // Ordenar por fecha (los más viejos primero para ver los retrasos)
+            pendingRecords.sort((a, b) => new Date(a.checkoutDate) - new Date(b.checkoutDate));
+
+            if (pendingRecords.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300">
+                        <i class="ph ph-check-circle text-4xl text-gray-400 mb-2 block"></i>
+                        <p class="text-gray-500 font-medium">Todas las llaves están en su lugar.</p>
+                    </div>`;
+                return;
+            }
+
+            pendingRecords.forEach(record => {
+                const keyType = keyTypes.find(k => k.id === record.keyTypeId);
+                if (!keyType) return;
+                
+                const style = getStatusStyling(record.checkoutDate);
+                const daysText = getDaysText(calculateDays(record.checkoutDate));
+
+                // Determinar qué mostrar a la izquierda: la imagen seleccionada o el ícono
+                let visualElementHtml = '';
+                if (record.selectedImage) {
+                    visualElementHtml = `
+                        <div onclick="openImageViewer('${record.selectedImage}')" class="w-12 h-12 rounded-lg overflow-hidden shrink-0 border-2 ${style.border} cursor-pointer hover:opacity-80 transition-opacity relative group">
+                            <img src="${record.selectedImage}" class="w-full h-full object-cover" alt="Llave">
+                            <div class="absolute inset-0 bg-black/20 hidden group-hover:flex items-center justify-center">
+                                <i class="ph-fill ph-magnifying-glass-plus text-white text-xl shadow-sm"></i>
+                            </div>
+                        </div>`;
+                } else {
+                    visualElementHtml = `
+                        <div class="w-12 h-12 rounded-full ${style.bg} ${style.text} flex items-center justify-center text-2xl shrink-0">
+                            <i class="ph ${keyType.icon}"></i>
+                        </div>`;
+                }
+
+                const card = document.createElement('div');
+                card.className = `bg-white p-4 rounded-2xl shadow-sm border ${style.border} flex flex-col gap-3`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <div class="flex items-center gap-3">
+                            ${visualElementHtml}
+                            <div>
+                                <h3 class="font-bold text-gray-800 leading-tight">${keyType.name}</h3>
+                                <p class="text-sm text-gray-600 mt-0.5"><i class="ph ph-user"></i> ${record.borrower}</p>
+                            </div>
+                        </div>
+                        <span class="text-xs font-bold px-2.5 py-1 rounded-full ${style.bg} ${style.text} whitespace-nowrap">
+                            ${daysText}
+                        </span>
+                    </div>
+                    <div class="text-sm text-gray-500 bg-gray-50 p-2 rounded-lg flex items-start gap-2">
+                        <i class="ph ph-info mt-0.5 shrink-0"></i>
+                        <span class="italic">Uso: ${record.purpose}</span>
+                    </div>
+                    <div class="flex gap-2 mt-1">
+                        <button onclick="promptReturn('${record.id}')" class="flex-1 bg-indigo-50 text-indigo-700 font-semibold py-2 rounded-xl text-sm border border-indigo-100 hover:bg-indigo-100 transition">
+                            <i class="ph ph-download-simple"></i> Recibir
+                        </button>
+                        <button onclick="promptLost('${record.id}')" class="flex-1 bg-red-50 text-red-700 font-semibold py-2 rounded-xl text-sm border border-red-100 hover:bg-red-100 transition">
+                            <i class="ph ph-warning-circle"></i> Extraviada
+                        </button>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderInventario() {
+            const container = document.getElementById('inventario-list');
+            container.innerHTML = '';
+
+            if (keyTypes.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-1 sm:col-span-2 text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300">
+                        <i class="ph ph-keys text-4xl text-gray-400 mb-2 block"></i>
+                        <p class="text-gray-500 font-medium">No hay llaves registradas en el inventario.</p>
+                    </div>`;
+                return;
+            }
+
+            keyTypes.forEach(keyType => {
+                const available = getAvailableCount(keyType.id);
+                const outCount = keyType.total - available;
+                
+                // Generar pequeñas miniaturas de las imágenes guardadas, máximo 3
+                let imagesHtml = '';
+                if (keyType.images && keyType.images.length > 0) {
+                    const displayImages = keyType.images.slice(0, 3);
+                    const extraCount = keyType.images.length - 3;
+                    
+                    let imgs = displayImages.map(imgSrc => 
+                        `<img src="${imgSrc}" class="w-6 h-6 rounded-full object-cover border border-white -ml-2 first:ml-0" alt="img">`
+                    ).join('');
+                    
+                    if (extraCount > 0) {
+                        imgs += `<div class="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center border border-white -ml-2 text-gray-600 font-medium">+${extraCount}</div>`;
+                    }
+                    
+                    imagesHtml = `<div class="flex mt-2">${imgs}</div>`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-4 relative group';
+                card.innerHTML = `
+                    <button onclick="promptDeleteKey('${keyType.id}')" class="absolute top-2 right-2 text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100" title="Eliminar tipo de llave">
+                        <i class="ph-fill ph-trash"></i>
+                    </button>
+                    <div class="w-12 h-12 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-2xl shrink-0 mt-1">
+                        <i class="ph ${keyType.icon}"></i>
+                    </div>
+                    <div class="flex-1 min-w-0 pr-6">
+                        <h3 class="font-bold text-gray-800 truncate block">${keyType.name}</h3>
+                        <div class="flex gap-3 text-sm mt-1">
+                            <span class="text-gray-500">Total: ${keyType.total}</span>
+                            <span class="${available > 0 ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'}">Disp: ${available}</span>
+                        </div>
+                        ${imagesHtml}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderHistorial() {
+            const container = document.getElementById('historial-list');
+            container.innerHTML = '';
+            
+            const historyRecords = records.filter(r => r.status !== 'pending');
+            // Ordenar por fecha de devolución (más recientes primero)
+            historyRecords.sort((a, b) => new Date(b.returnDate) - new Date(a.returnDate));
+
+            if (historyRecords.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center p-8 bg-white rounded-2xl border border-dashed border-gray-300">
+                        <p class="text-gray-500">Aún no hay historial de devoluciones.</p>
+                    </div>`;
+                return;
+            }
+
+            historyRecords.forEach(record => {
+                const keyType = keyTypes.find(k => k.id === record.keyTypeId);
+                if (!keyType) return;
+                
+                const isReturned = record.status === 'returned';
+                const statusColor = isReturned ? 'text-emerald-600 bg-emerald-100' : 'text-rose-600 bg-rose-100';
+                const statusIcon = isReturned ? 'ph-check-circle' : 'ph-warning';
+                const statusText = isReturned ? 'Recibida' : 'Extraviada';
+
+                let visualElementHtml = '';
+                if (record.selectedImage) {
+                    visualElementHtml = `
+                        <div class="w-10 h-10 rounded-lg overflow-hidden shrink-0 border border-gray-200 opacity-80">
+                            <img src="${record.selectedImage}" class="w-full h-full object-cover grayscale" alt="Llave">
+                        </div>`;
+                } else {
+                    visualElementHtml = `
+                        <div class="w-10 h-10 rounded-full ${statusColor} flex items-center justify-center text-xl shrink-0">
+                            <i class="ph ${statusIcon}"></i>
+                        </div>`;
+                }
+
+                const card = document.createElement('div');
+                card.className = 'bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex gap-3 opacity-80';
+                card.innerHTML = `
+                    ${visualElementHtml}
+                    <div class="flex-1">
+                        <div class="flex justify-between items-start">
+                            <h3 class="font-bold text-gray-800">${keyType.name}</h3>
+                            <span class="text-xs text-gray-500">${formatDate(record.returnDate)}</span>
+                        </div>
+                        <p class="text-sm text-gray-600">Por: ${record.borrower}</p>
+                        <p class="text-xs text-gray-500 mt-1">Estado final: <strong class="${isReturned ? 'text-emerald-600' : 'text-rose-600'}">${statusText}</strong></p>
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function renderAll() {
+            renderPendientes();
+            renderInventario();
+            renderHistorial();
+        }
+
+        // --- ACCIONES DE FORMULARIOS ---
+        function renderIconSelector() {
+            const container = document.getElementById('icon-selector');
+            container.innerHTML = '';
+            iconOptions.forEach(icon => {
+                const btn = document.createElement('button');
+                btn.className = `p-3 text-2xl rounded-xl border flex items-center justify-center transition ${selectedIcon === icon ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`;
+                btn.innerHTML = `<i class="ph ${icon}"></i>`;
+                btn.onclick = () => {
+                    selectedIcon = icon;
+                    renderIconSelector(); // Re-render para actualizar el visual seleccionado
+                };
+                container.appendChild(btn);
+            });
+        }
+
+        function saveNewKey() {
+            const name = document.getElementById('newKeyName').value.trim();
+            const total = parseInt(document.getElementById('newKeyTotal').value);
+
+            if (!name || isNaN(total) || total <= 0) {
+                showMessage("Faltan datos", "Por favor ingresa un nombre y una cantidad válida.");
+                return;
+            }
+
+            const newId = 'k' + Date.now();
+            
+            // Hacemos una copia de las imágenes subidas para asignarlas a este registro
+            const imagesToSave = [...uploadedImages];
+
+            keyTypes.push({
+                id: newId,
+                name: name,
+                total: total,
+                icon: selectedIcon,
+                images: imagesToSave
+            });
+
+            saveData(); // Guardar cambios
+
+            // Limpiar formulario
+            document.getElementById('newKeyName').value = '';
+            document.getElementById('newKeyTotal').value = '';
+            uploadedImages = [];
+            document.getElementById('imagePreviewContainer').innerHTML = '';
+            document.getElementById('imagePreviewContainer').classList.add('hidden');
+            
+            closeModal('addKeyModal');
+            renderAll();
+        }
+
+        function openLendModal() {
+            const select = document.getElementById('lendKeySelect');
+            select.innerHTML = '<option value="">-- Selecciona una categoría --</option>';
+            
+            // Llenar opciones solo con las que tienen disponibles
+            let hasAvailable = false;
+            keyTypes.forEach(keyType => {
+                const available = getAvailableCount(keyType.id);
+                if (available > 0) {
+                    hasAvailable = true;
+                    select.innerHTML += `<option value="${keyType.id}">${keyType.name} (${available} disponibles)</option>`;
+                }
+            });
+
+            if (!hasAvailable) {
+                showMessage("Sin llaves", "Todas las llaves están prestadas en este momento.");
+                return;
+            }
+
+            // Resetear UI de imágenes
+            document.getElementById('lendImageSelectionContainer').classList.add('hidden');
+            selectedImageToLend = null;
+
+            openModal('lendKeyModal');
+        }
+
+        function saveLoan() {
+            const keyTypeId = document.getElementById('lendKeySelect').value;
+            const borrower = document.getElementById('lendBorrower').value.trim();
+            const purpose = document.getElementById('lendPurpose').value.trim();
+
+            if (!keyTypeId || !borrower || !purpose) {
+                showMessage("Faltan datos", "Por favor completa todos los campos para registrar la entrega.");
+                return;
+            }
+
+            const newRecord = {
+                id: 'r' + Date.now(),
+                keyTypeId: keyTypeId,
+                borrower: borrower,
+                purpose: purpose,
+                checkoutDate: new Date().toISOString(),
+                returnDate: null,
+                status: 'pending',
+                selectedImage: selectedImageToLend // Guardamos la imagen seleccionada, puede ser null
+            };
+
+            records.push(newRecord);
+
+            saveData(); // Guardar cambios
+
+            // Limpiar form
+            document.getElementById('lendKeySelect').value = '';
+            document.getElementById('lendBorrower').value = '';
+            document.getElementById('lendPurpose').value = '';
+            document.getElementById('lendImageSelectionContainer').classList.add('hidden');
+            selectedImageToLend = null;
+            
+            closeModal('lendKeyModal');
+            switchTab('pendientes'); // Ir a la vista principal
+        }
+
+        function promptReturn(recordId) {
+            pendingActionId = recordId;
+            const record = records.find(r => r.id === recordId);
+            const keyType = keyTypes.find(k => k.id === record.keyTypeId);
+            
+            document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-emerald-100 text-emerald-600';
+            document.getElementById('actionIcon').innerHTML = '<i class="ph ph-check-circle"></i>';
+            document.getElementById('actionTitle').innerText = '¿Recibir Llave?';
+            document.getElementById('actionDesc').innerText = `Vas a marcar como recibida la llave de ${keyType.name} que tiene ${record.borrower}.`;
+            
+            const confirmBtn = document.getElementById('actionConfirmBtn');
+            confirmBtn.className = 'flex-1 bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition';
+            confirmBtn.innerText = 'Sí, Recibida';
+            confirmBtn.onclick = () => confirmAction('returned');
+            
+            openModal('actionModal');
+        }
+
+        function promptLost(recordId) {
+            pendingActionId = recordId;
+            const record = records.find(r => r.id === recordId);
+            const keyType = keyTypes.find(k => k.id === record.keyTypeId);
+
+            document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-rose-100 text-rose-600';
+            document.getElementById('actionIcon').innerHTML = '<i class="ph ph-warning"></i>';
+            document.getElementById('actionTitle').innerText = '¿Reportar Extraviada?';
+            document.getElementById('actionDesc').innerText = `Vas a reportar como EXTRAVIADA la llave de ${keyType.name} prestada a ${record.borrower}.`;
+            
+            const confirmBtn = document.getElementById('actionConfirmBtn');
+            confirmBtn.className = 'flex-1 bg-rose-600 text-white font-bold py-3 rounded-xl hover:bg-rose-700 transition';
+            confirmBtn.innerText = 'Reportar';
+            confirmBtn.onclick = () => confirmAction('lost');
+
+            openModal('actionModal');
+        }
+
+        function confirmAction(status) {
+            const recordIndex = records.findIndex(r => r.id === pendingActionId);
+            if (recordIndex !== -1) {
+                records[recordIndex].status = status;
+                records[recordIndex].returnDate = new Date().toISOString();
+                saveData(); // Guardar cambios
+            }
+            closeModal('actionModal');
+            renderAll();
+            pendingActionId = null;
+        }
+
+        function promptDeleteKey(keyTypeId) {
+            pendingDeleteKeyId = keyTypeId;
+            const keyType = keyTypes.find(k => k.id === keyTypeId);
+            
+            // Verificar si hay llaves pendientes de este tipo
+            const hasPending = records.some(r => r.keyTypeId === keyTypeId && r.status === 'pending');
+            
+            if (hasPending) {
+                showMessage("No se puede eliminar", `Aún hay llaves de "${keyType.name}" prestadas. Debes recibirlas primero antes de eliminar el tipo de llave del inventario.`);
+                pendingDeleteKeyId = null;
+                return;
+            }
+
+            document.getElementById('actionIcon').className = 'mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl bg-red-100 text-red-600';
+            document.getElementById('actionIcon').innerHTML = '<i class="ph ph-trash"></i>';
+            document.getElementById('actionTitle').innerText = '¿Eliminar Llave?';
+            document.getElementById('actionDesc').innerText = `Vas a eliminar "${keyType.name}" del inventario de forma permanente. El historial de préstamos asociados se mantendrá, pero no podrás prestarla nuevamente.`;
+            
+            const confirmBtn = document.getElementById('actionConfirmBtn');
+            confirmBtn.className = 'flex-1 bg-red-600 text-white font-bold py-3 rounded-xl hover:bg-red-700 transition';
+            confirmBtn.innerText = 'Sí, Eliminar';
+            confirmBtn.onclick = () => confirmDeleteKey();
+            
+            openModal('actionModal');
+        }
+
+        function confirmDeleteKey() {
+            if (pendingDeleteKeyId) {
+                // Filtrar el tipo de llave para eliminarlo
+                keyTypes = keyTypes.filter(k => k.id !== pendingDeleteKeyId);
+                saveData(); // Guardar cambios
+            }
+            closeModal('actionModal');
+            renderAll();
+            pendingDeleteKeyId = null;
+        }
+
+        // --- INTEGRACIÓN CON GEMINI API ---
+        
+        async function callGeminiAPI(prompt, systemPrompt = "") {
+            const apiKey = ""; // API Key proveída por el entorno Canvas
+            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`;
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }]
+            };
+            
+            if (systemPrompt) {
+                payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+            }
+
+            try {
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                
+                if (result.candidates && result.candidates[0].content?.parts[0]?.text) {
+                    return result.candidates[0].content.parts[0].text;
+                } else {
+                    console.error("Respuesta inesperada de la API:", result);
+                    throw new Error("Formato de respuesta inválido.");
+                }
+            } catch (error) {
+                console.error("Error llamando a Gemini:", error);
+                return null;
+            }
+        }
+
+        async function suggestIconWithAI() {
+            const nameInput = document.getElementById('newKeyName').value.trim();
+            if (!nameInput) {
+                showMessage("Faltan datos", "Escribe el nombre o marca de la llave primero para que la IA sugiera un ícono.");
+                return;
+            }
+
+            const btn = document.getElementById('btnSuggestIcon');
+            const originalContent = btn.innerHTML;
+            btn.innerHTML = '<i class="ph ph-spinner animate-spin"></i> Pensando...';
+            btn.disabled = true;
+
+            const systemPrompt = "Eres un asistente de interfaz de usuario. Tu única tarea es recibir un nombre de objeto, vehículo o lugar y seleccionar el nombre del ícono más apropiado de una lista estricta. Responde ÚNICAMENTE con el string del ícono exacto de la lista, sin explicaciones, sin markdown y sin texto adicional.";
+            
+            const prompt = `
+            Nombre de la llave: "${nameInput}"
+            Lista de íconos permitidos: [${iconOptions.join(', ')}]
+            
+            Devuelve solo el ícono de la lista que mejor lo represente. Si no hay una correspondencia clara, devuelve "ph-lock-key".
+            `;
+
+            const suggestedIcon = await callGeminiAPI(prompt, systemPrompt);
+
+            if (suggestedIcon) {
+                const cleanIcon = suggestedIcon.trim().replace(/['"`]/g, ''); // Limpiar cualquier formato residual
+                if (iconOptions.includes(cleanIcon)) {
+                    selectedIcon = cleanIcon;
+                    renderIconSelector(); // Actualizar la UI visualmente
+                } else {
+                    console.warn("La IA devolvió un ícono no válido:", cleanIcon);
+                }
+            } else {
+                showMessage("Aviso", "No se pudo obtener una sugerencia de la IA en este momento.");
+            }
+
+            btn.innerHTML = originalContent;
+            btn.disabled = false;
+        }
+
+        async function generateInsights() {
+            // Preparar el estado actual de los datos para enviárselos a la IA
+            const pendingLoans = records.filter(r => r.status === 'pending').map(r => {
+                const kt = keyTypes.find(k => k.id === r.keyTypeId);
+                return {
+                    tipo_llave: kt ? kt.name : 'Desconocida',
+                    prestada_a: r.borrower,
+                    motivo: r.purpose,
+                    dias_fuera: calculateDays(r.checkoutDate)
+                };
+            });
+
+            const inventoryState = keyTypes.map(kt => ({
+                tipo_llave: kt.name,
+                inventario_total: kt.total,
+                disponibles_actualmente: getAvailableCount(kt.id)
+            }));
+
+            const dataToAnalyze = {
+                llaves_pendientes_de_devolucion: pendingLoans,
+                estado_general_inventario: inventoryState
+            };
+
+            // Preparar la Interfaz (Mostrar modal de carga)
+            document.getElementById('aiInsightsContent').classList.add('hidden');
+            document.getElementById('aiLoadingState').classList.remove('hidden');
+            openModal('aiInsightsModal');
+
+            const systemPrompt = "Eres un analista experto en control de inventario y logística. Proporcionas resúmenes ejecutivos claros, directos, útiles y con tono profesional.";
+            const prompt = `
+            Analiza los siguientes datos JSON del sistema de 'Control de Llaves' de una empresa.
+            
+            Datos en formato JSON:
+            ${JSON.stringify(dataToAnalyze, null, 2)}
+            
+            Por favor, genera un reporte ejecutivo usando formato HTML básico válido (utiliza etiquetas <b>, <ul>, <li>, <p> para estilizar). 
+            Tu reporte debe incluir:
+            1. <p> Un resumen general breve del estado del inventario (cuántas llaves están fuera vs disponibles).
+            2. <ul> Una lista destacando las llaves con MAYOR riesgo de extravío (aquellas que llevan 1 o más días fuera, si las hay). Menciona quién la tiene y cuántos días lleva.
+            3. <p> Una sugerencia o recomendación estratégica breve basada en estos datos.
+            
+            NO devuelvas el texto envuelto en bloques de código markdown (como \`\`\`html), devuelve únicamente las etiquetas HTML crudas.
+            `;
+
+            const aiResponse = await callGeminiAPI(prompt, systemPrompt);
+
+            const contentDiv = document.getElementById('aiInsightsContent');
+            const loadingDiv = document.getElementById('aiLoadingState');
+            
+            loadingDiv.classList.add('hidden');
+            contentDiv.classList.remove('hidden');
+
+            if (aiResponse) {
+                // Eliminar posibles backticks residuales de markdown si el modelo no sigue la instrucción estricta
+                const cleanHTML = aiResponse.replace(/```html/g, '').replace(/```/g, '').trim();
+                contentDiv.innerHTML = cleanHTML;
+            } else {
+                contentDiv.innerHTML = `
+                    <div class="flex items-center gap-2 text-rose-600 font-medium">
+                        <i class="ph-fill ph-warning-circle text-2xl"></i>
+                        <p>Ocurrió un error al contactar a la IA. Por favor, intenta nuevamente más tarde.</p>
+                    </div>`;
+            }
+        }
+
+        // --- INICIALIZACIÓN ---
+        window.onload = () => {
+            renderAll();
+        };
+
+    </script>
+</body>
+</html>
