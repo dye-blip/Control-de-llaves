@@ -267,6 +267,37 @@
                     </div>
                 </div>
 
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Fecha de entrega <span class="text-xs font-normal text-gray-500">(se llena automáticamente, puedes editarla)</span></label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="ph ph-calendar text-gray-400"></i>
+                        </div>
+                        <input type="datetime-local" id="lendCheckoutDate" class="w-full pl-10 border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Fecha de devolución esperada <span class="text-xs font-normal text-gray-500">(Opcional)</span></label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="ph ph-calendar-check text-gray-400"></i>
+                        </div>
+                        <input type="datetime-local" id="lendExpectedReturn" class="w-full pl-10 border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-sm">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1.5">Fecha de entrega</label>
+                    <div class="relative">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="ph ph-calendar-check text-gray-400"></i>
+                        </div>
+                        <input type="datetime-local" id="lendCheckoutDate" class="w-full pl-10 border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-sm">
+                    </div>
+                    <p class="text-xs text-gray-400 mt-1">Si no seleccionas, se usa la fecha y hora actual.</p>
+                </div>
+
                 <button onclick="saveLoan()" class="w-full bg-indigo-600 text-white font-bold py-3.5 rounded-xl mt-6 hover:bg-indigo-700 transition flex items-center justify-center gap-2 shadow-md">
                     <i class="ph-bold ph-check"></i> Confirmar Préstamo
                 </button>
@@ -279,8 +310,19 @@
         <div class="bg-white w-full max-w-sm rounded-2xl p-6 shadow-2xl text-center">
             <div id="actionIcon" class="mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-4 text-3xl"></div>
             <h3 id="actionTitle" class="text-xl font-bold mb-2">Título</h3>
-            <p id="actionDesc" class="text-gray-600 mb-6 text-sm">Descripción del contexto.</p>
+            <p id="actionDesc" class="text-gray-600 mb-3 text-sm">Descripción del contexto.</p>
             
+            <div id="returnDateContainer" class="hidden mb-4 text-left">
+                <label class="block text-sm font-semibold text-gray-700 mb-1.5">Fecha de devolución</label>
+                <div class="relative">
+                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                        <i class="ph ph-calendar-check text-gray-400"></i>
+                    </div>
+                    <input type="datetime-local" id="returnDateInput" class="w-full pl-10 border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none shadow-sm">
+                </div>
+                <p class="text-xs text-gray-400 mt-1">Si no seleccionas, se usa la fecha y hora actual.</p>
+            </div>
+
             <div class="flex gap-3">
                 <button onclick="closeModal('actionModal')" class="flex-1 bg-gray-200 text-gray-800 font-bold py-3 rounded-xl hover:bg-gray-300 transition">
                     Cancelar
@@ -672,6 +714,9 @@
             if (!hasAvailable) { showMessage("Sin llaves", "Todas las llaves están prestadas en este momento."); return; }
             document.getElementById('lendImageSelectionContainer').classList.add('hidden');
             selectedImageToLend = null;
+            // Set default to now
+            const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+            document.getElementById('lendCheckoutDate').value = nowLocal;
             openModal('lendKeyModal');
         }
 
@@ -681,7 +726,9 @@
             const purpose = document.getElementById('lendPurpose').value.trim();
             if (!keyTypeId || !borrower || !purpose) { showMessage("Faltan datos", "Por favor completa todos los campos."); return; }
             const newId = 'r' + Date.now();
-            const newRecord = { keyTypeId, borrower, purpose, checkoutDate: new Date().toISOString(), returnDate: null, status: 'pending', selectedImage: selectedImageToLend };
+            const checkoutDateVal = document.getElementById('lendCheckoutDate').value;
+            const checkoutDate = checkoutDateVal ? new Date(checkoutDateVal).toISOString() : new Date().toISOString();
+            const newRecord = { keyTypeId, borrower, purpose, checkoutDate, returnDate: null, status: 'pending', selectedImage: selectedImageToLend };
             if (useFirebase && auth.currentUser) {
                 try { await setDoc(doc(db, 'controlLlaves', 'datos', 'records', newId), newRecord); }
                 catch (err) { console.error("Error saving record: ", err); }
@@ -700,6 +747,11 @@
             document.getElementById('actionIcon').innerHTML = '<i class="ph ph-check-circle"></i>';
             document.getElementById('actionTitle').innerText = '¿Recibir Llave?';
             document.getElementById('actionDesc').innerText = `Vas a marcar como recibida la llave de ${keyType.name} que tiene ${record.borrower}.`;
+            // Show return date field
+            const returnContainer = document.getElementById('returnDateContainer');
+            returnContainer.classList.remove('hidden');
+            const nowLocal = new Date(Date.now() - new Date().getTimezoneOffset()*60000).toISOString().slice(0,16);
+            document.getElementById('returnDateInput').value = nowLocal;
             const confirmBtn = document.getElementById('actionConfirmBtn');
             confirmBtn.className = 'flex-1 bg-emerald-600 text-white font-bold py-3 rounded-xl hover:bg-emerald-700 transition';
             confirmBtn.innerText = 'Sí, Recibida'; confirmBtn.onclick = () => confirmAction('returned');
@@ -714,6 +766,7 @@
             document.getElementById('actionIcon').innerHTML = '<i class="ph ph-warning"></i>';
             document.getElementById('actionTitle').innerText = '¿Reportar Extraviada?';
             document.getElementById('actionDesc').innerText = `Vas a reportar como EXTRAVIADA la llave de ${keyType.name} prestada a ${record.borrower}.`;
+            document.getElementById('returnDateContainer').classList.add('hidden');
             const confirmBtn = document.getElementById('actionConfirmBtn');
             confirmBtn.className = 'flex-1 bg-rose-600 text-white font-bold py-3 rounded-xl hover:bg-rose-700 transition';
             confirmBtn.innerText = 'Reportar'; confirmBtn.onclick = () => confirmAction('lost');
@@ -723,12 +776,14 @@
         async function confirmAction(status) {
             const recordIndex = records.findIndex(r => r.id === pendingActionId);
             if (recordIndex !== -1) {
-                const nowStr = new Date().toISOString();
+                const returnDateVal = document.getElementById('returnDateInput').value;
+                const nowStr = returnDateVal ? new Date(returnDateVal).toISOString() : new Date().toISOString();
                 if (useFirebase && auth.currentUser) {
                     try { await updateDoc(doc(db, 'controlLlaves', 'datos', 'records', pendingActionId), { status, returnDate: nowStr }); }
                     catch (err) { console.error("Error updating record: ", err); }
                 } else { records[recordIndex].status = status; records[recordIndex].returnDate = nowStr; saveLocalData(); renderAll(); }
             }
+            document.getElementById('returnDateContainer').classList.add('hidden');
             closeModal('actionModal'); pendingActionId = null;
         }
 
