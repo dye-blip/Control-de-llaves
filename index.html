@@ -136,6 +136,54 @@
         </button>
     </nav>
 
+    <!-- MODAL: Editar Llave -->
+    <div id="editKeyModal" class="fixed inset-0 bg-black/50 z-50 hidden flex flex-col justify-end sm:justify-center items-center">
+        <div class="bg-white w-full sm:w-[32rem] max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl transform transition-transform">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold">Editar Tipo de Llave</h3>
+                <button onclick="closeModal('editKeyModal')" class="text-gray-400 hover:text-gray-600 bg-gray-100 p-2 rounded-full">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Nombre o Marca</label>
+                    <input type="text" id="editKeyName" class="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Marca o descripción">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Cantidad Total</label>
+                    <input type="number" id="editKeyTotal" class="w-full border border-gray-300 rounded-xl p-3 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Ej: 11" min="1">
+                </div>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Imágenes de las llaves</label>
+                    <div id="editCurrentImages" class="flex overflow-x-auto gap-2 mb-3 py-2">
+                        <!-- Existing images will be populated here -->
+                    </div>
+                    <div class="flex items-center justify-center w-full">
+                        <label for="editKeyImages" class="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-xl cursor-pointer bg-gray-50 hover:bg-gray-100">
+                            <div class="flex flex-col items-center justify-center pt-5 pb-6">
+                                <i class="ph ph-upload-simple text-3xl text-gray-400 mb-2"></i>
+                                <p class="mb-2 text-sm text-gray-500"><span class="font-semibold">Agregar más imágenes</span></p>
+                            </div>
+                            <input id="editKeyImages" type="file" class="hidden" multiple accept="image/*" onchange="handleEditImageUpload(event)" />
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Selecciona un Ícono</label>
+                    <div class="grid grid-cols-4 sm:grid-cols-8 gap-2" id="edit-icon-selector">
+                        <!-- JS fills icons -->
+                    </div>
+                </div>
+                <button onclick="saveEditedKey()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl mt-4 hover:bg-indigo-700 transition">
+                    Guardar Cambios
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: Agregar Nueva Llave -->
     <div id="addKeyModal" class="fixed inset-0 bg-black/50 z-50 hidden flex flex-col justify-end sm:justify-center items-center">
         <div class="bg-white w-full sm:w-[32rem] max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl transform transition-transform">
@@ -388,6 +436,9 @@
         let selectedImageToLend = null;
         let pendingActionId = null;
         let pendingDeleteKeyId = null;
+        let editingKeyId = null;
+        let editingKeyImages = [];
+        let editSelectedIcon = 'ph-car';
 
         async function authenticateFirebase() {
             if (!useFirebase) return null;
@@ -644,7 +695,7 @@
                 }
                 const card = document.createElement('div');
                 card.className = 'bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex items-start gap-4 relative group';
-                card.innerHTML = `<button onclick="promptDeleteKey('${keyType.id}')" class="absolute top-2 right-2 text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100" title="Eliminar tipo de llave"><i class="ph-fill ph-trash"></i></button><div class="w-12 h-12 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-2xl shrink-0 mt-1"><i class="ph ${keyType.icon}"></i></div><div class="flex-1 min-w-0 pr-6"><h3 class="font-bold text-gray-800 truncate block">${keyType.name}</h3><div class="flex gap-3 text-sm mt-1"><span class="text-gray-500">Total: ${keyType.total}</span><span class="${available > 0 ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'}">Disp: ${available}</span></div>${imagesHtml}</div>`;
+                card.innerHTML = `<div class="absolute top-2 right-2 flex gap-1"><button onclick="openEditKeyModal('${keyType.id}')" class="text-gray-300 hover:text-indigo-500 hover:bg-indigo-50 p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100" title="Editar tipo de llave"><i class="ph-fill ph-pencil-simple"></i></button><button onclick="promptDeleteKey('${keyType.id}')" class="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-full transition-colors opacity-0 group-hover:opacity-100 sm:opacity-100" title="Eliminar tipo de llave"><i class="ph-fill ph-trash"></i></button></div><div class="w-12 h-12 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-2xl shrink-0 mt-1"><i class="ph ${keyType.icon}"></i></div><div class="flex-1 min-w-0 pr-6"><h3 class="font-bold text-gray-800 truncate block">${keyType.name}</h3><div class="flex gap-3 text-sm mt-1"><span class="text-gray-500">Total: ${keyType.total}</span><span class="${available > 0 ? 'text-emerald-600 font-medium' : 'text-red-500 font-medium'}">Disp: ${available}</span></div>${imagesHtml}</div>`;
                 container.appendChild(card);
             });
         }
@@ -867,6 +918,95 @@ Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen 
                 : '<div class="flex items-center gap-2 text-rose-600 font-medium"><i class="ph-fill ph-warning-circle text-2xl"></i><p>Error al contactar la IA.</p></div>';
         }
 
+        function renderEditIconSelector() {
+            const container = document.getElementById('edit-icon-selector');
+            container.innerHTML = '';
+            iconOptions.forEach(icon => {
+                const btn = document.createElement('button');
+                btn.className = `p-3 text-2xl rounded-xl border flex items-center justify-center transition ${editSelectedIcon === icon ? 'border-indigo-600 bg-indigo-50 text-indigo-600' : 'border-gray-200 text-gray-500 hover:bg-gray-50'}`;
+                btn.innerHTML = `<i class="ph ${icon}"></i>`;
+                btn.onclick = () => { editSelectedIcon = icon; renderEditIconSelector(); };
+                container.appendChild(btn);
+            });
+        }
+
+        function handleEditImageUpload(event) {
+            const files = event.target.files;
+            Array.from(files).forEach(file => {
+                if (!file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    editingKeyImages.push(e.target.result);
+                    displayEditImages();
+                };
+                reader.readAsDataURL(file);
+            });
+            event.target.value = '';
+        }
+
+        function displayEditImages() {
+            const container = document.getElementById('editCurrentImages');
+            container.innerHTML = '';
+            if (editingKeyImages.length === 0) {
+                container.classList.add('hidden');
+                return;
+            }
+            container.classList.remove('hidden');
+            editingKeyImages.forEach((imgSrc, index) => {
+                const imgContainer = document.createElement('div');
+                imgContainer.className = 'relative shrink-0 w-20 h-20 rounded-lg overflow-hidden border border-gray-200';
+                const img = document.createElement('img');
+                img.src = imgSrc; img.className = 'w-full h-full object-cover';
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'absolute top-1 right-1 bg-white rounded-full p-0.5 text-red-500 hover:bg-red-100';
+                deleteBtn.innerHTML = '<i class="ph-fill ph-x-circle"></i>';
+                deleteBtn.onclick = () => {
+                    editingKeyImages.splice(index, 1);
+                    displayEditImages();
+                };
+                imgContainer.appendChild(img); imgContainer.appendChild(deleteBtn);
+                container.appendChild(imgContainer);
+            });
+        }
+
+        function openEditKeyModal(keyId) {
+            editingKeyId = keyId;
+            const keyType = keyTypes.find(k => k.id === keyId);
+            if (!keyType) return;
+            document.getElementById('editKeyName').value = keyType.name;
+            document.getElementById('editKeyTotal').value = keyType.total;
+            editSelectedIcon = keyType.icon || 'ph-car';
+            editingKeyImages = keyType.images ? [...keyType.images] : [];
+            renderEditIconSelector();
+            displayEditImages();
+            openModal('editKeyModal');
+        }
+
+        async function saveEditedKey() {
+            const name = document.getElementById('editKeyName').value.trim();
+            const total = parseInt(document.getElementById('editKeyTotal').value);
+            if (!name || isNaN(total) || total <= 0) {
+                showMessage("Faltan datos", "Por favor ingresa un nombre y una cantidad válida.");
+                return;
+            }
+            const keyData = { name, total, icon: editSelectedIcon, images: [...editingKeyImages] };
+            if (useFirebase && auth.currentUser) {
+                try {
+                    await updateDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', editingKeyId), keyData);
+                } catch (err) { console.error("Error updating key: ", err); }
+            } else {
+                const idx = keyTypes.findIndex(k => k.id === editingKeyId);
+                if (idx !== -1) {
+                    keyTypes[idx] = { id: editingKeyId, ...keyData };
+                    saveLocalData();
+                    renderAll();
+                }
+            }
+            closeModal('editKeyModal');
+            editingKeyId = null;
+            editingKeyImages = [];
+        }
+
         window.switchTab = switchTab; window.openModal = openModal; window.closeModal = closeModal;
         window.showMessage = showMessage; window.openImageViewer = openImageViewer;
         window.handleImageUpload = handleImageUpload; window.selectImageToLend = selectImageToLend;
@@ -876,6 +1016,8 @@ Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen 
         window.confirmAction = confirmAction; window.promptDeleteKey = promptDeleteKey;
         window.confirmDeleteKey = confirmDeleteKey; window.suggestIconWithAI = suggestIconWithAI;
         window.generateInsights = generateInsights;
+        window.openEditKeyModal = openEditKeyModal; window.saveEditedKey = saveEditedKey;
+        window.handleEditImageUpload = handleEditImageUpload;
 
         window.onload = async () => {
             const user = await authenticateFirebase();
