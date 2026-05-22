@@ -11,6 +11,9 @@
     <!-- Fuente Inter -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     
+    <!-- html2canvas for screenshot -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -62,6 +65,9 @@
             <h1 class="text-xl font-bold">Control de Llaves</h1>
         </div>
         <div class="flex gap-2">
+            <button onclick="generateDailyReport()" class="bg-emerald-500 hover:bg-emerald-400 p-2 rounded-full transition flex items-center justify-center shadow-sm" title="Reporte Diario">
+                <i class="ph-fill ph-clipboard-text text-xl"></i>
+            </button>
             <button onclick="generateInsights()" class="bg-purple-500 hover:bg-purple-400 p-2 rounded-full transition flex items-center justify-center shadow-sm" title="Resumen con IA">
                 <i class="ph-fill ph-magic-wand text-xl"></i>
             </button>
@@ -235,6 +241,33 @@
                 </div>
                 <button onclick="saveNewKey()" class="w-full bg-indigo-600 text-white font-bold py-3 rounded-xl mt-4 hover:bg-indigo-700 transition">
                     Guardar Llave
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Reporte Diario -->
+    <div id="dailyReportModal" class="fixed inset-0 bg-black/60 z-[60] hidden flex flex-col justify-end sm:justify-center items-center p-4">
+        <div class="bg-white w-full sm:w-[40rem] max-h-[90vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl transform transition-transform">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-xl font-bold flex items-center gap-2 text-emerald-700">
+                    <i class="ph-fill ph-clipboard-text"></i> Reporte Diario de Llaves
+                </h3>
+                <button onclick="closeModal('dailyReportModal')" class="text-gray-400 hover:text-gray-600 bg-gray-100 p-2 rounded-full">
+                    <i class="ph ph-x"></i>
+                </button>
+            </div>
+            
+            <div id="dailyReportContent" class="space-y-4">
+                <!-- Content will be injected here -->
+            </div>
+
+            <div class="flex gap-3 mt-6">
+                <button onclick="downloadReportImage()" class="flex-1 bg-indigo-600 text-white font-bold py-3 rounded-xl hover:bg-indigo-700 transition flex items-center justify-center gap-2">
+                    <i class="ph-fill ph-download-simple"></i> Descargar Imagen
+                </button>
+                <button onclick="closeModal('dailyReportModal')" class="flex-1 bg-gray-100 text-gray-800 font-bold py-3 rounded-xl hover:bg-gray-200 transition">
+                    Cerrar
                 </button>
             </div>
         </div>
@@ -687,8 +720,8 @@
                 const available = getAvailableCount(keyType.id);
                 let imagesHtml = '';
                 if (keyType.images && keyType.images.length > 0) {
-                    const displayImages = keyType.images.slice(0,3);
-                    const extraCount = keyType.images.length - 3;
+                    const displayImages = keyType.images.slice(0,5);
+                    const extraCount = keyType.images.length - 5;
                     let imgs = displayImages.map(imgSrc => `<img src="${imgSrc}" class="w-6 h-6 rounded-full object-cover border border-white -ml-2 first:ml-0" alt="img">`).join('');
                     if (extraCount > 0) imgs += `<div class="w-6 h-6 rounded-full bg-gray-200 text-xs flex items-center justify-center border border-white -ml-2 text-gray-600 font-medium">+${extraCount}</div>`;
                     imagesHtml = `<div class="flex mt-2">${imgs}</div>`;
@@ -896,6 +929,178 @@ Devuelve solo el ícono más apropiado. Si no hay correspondencia, devuelve "ph-
             btn.innerHTML = originalContent; btn.disabled = false;
         }
 
+        function generateDailyReport() {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            const todayStr = today.toISOString();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            const tomorrowStr = tomorrow.toISOString();
+
+            // Llaves prestadas HOY
+            const loanedToday = records.filter(r => {
+                const checkoutDate = new Date(r.checkoutDate);
+                return checkoutDate >= today && checkoutDate < tomorrow && r.status === 'pending';
+            });
+
+            // Llaves devueltas HOY
+            const returnedToday = records.filter(r => {
+                if (!r.returnDate) return false;
+                const returnDate = new Date(r.returnDate);
+                return returnDate >= today && returnDate < tomorrow && r.status === 'returned';
+            });
+
+            // Llaves extraviadas HOY
+            const lostToday = records.filter(r => {
+                if (!r.returnDate) return false;
+                const returnDate = new Date(r.returnDate);
+                return returnDate >= today && returnDate < tomorrow && r.status === 'lost';
+            });
+
+            // Todas las llaves actualmente fuera (pendientes)
+            const currentlyOut = records.filter(r => r.status === 'pending');
+
+            const container = document.getElementById('dailyReportContent');
+            const todayFormatted = today.toLocaleDateString('es-MX', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+            let html = `
+                <div class="bg-gradient-to-br from-emerald-50 to-blue-50 p-6 rounded-2xl border-2 border-emerald-200">
+                    <h4 class="text-center text-2xl font-bold text-gray-800 mb-2">📋 Reporte de Llaves</h4>
+                    <p class="text-center text-sm text-gray-600 mb-6">${todayFormatted}</p>
+                    
+                    <div class="grid grid-cols-1 gap-4">
+                        <!-- Llaves Prestadas Hoy -->
+                        <div class="bg-white p-4 rounded-xl border border-blue-200 shadow-sm">
+                            <h5 class="font-bold text-lg text-blue-700 mb-3 flex items-center gap-2">
+                                <i class="ph-fill ph-hand-coins text-2xl"></i>
+                                Llaves Prestadas Hoy (${loanedToday.length})
+                            </h5>`;
+            
+            if (loanedToday.length === 0) {
+                html += `<p class="text-gray-500 text-sm italic">No se prestaron llaves hoy.</p>`;
+            } else {
+                loanedToday.forEach(record => {
+                    const keyType = keyTypes.find(k => k.id === record.keyTypeId);
+                    if (keyType) {
+                        const time = new Date(record.checkoutDate).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                        html += `<div class="flex items-start gap-2 py-2 border-b border-gray-100 last:border-0">
+                            <i class="ph ${keyType.icon} text-xl text-blue-600 mt-0.5"></i>
+                            <div class="flex-1">
+                                <p class="font-semibold text-gray-800">${keyType.name}</p>
+                                <p class="text-sm text-gray-600">👤 ${record.borrower} • ${time}</p>
+                                <p class="text-xs text-gray-500 italic">${record.purpose}</p>
+                            </div>
+                        </div>`;
+                    }
+                });
+            }
+
+            html += `</div>
+                        
+                        <!-- Llaves Devueltas Hoy -->
+                        <div class="bg-white p-4 rounded-xl border border-emerald-200 shadow-sm">
+                            <h5 class="font-bold text-lg text-emerald-700 mb-3 flex items-center gap-2">
+                                <i class="ph-fill ph-check-circle text-2xl"></i>
+                                Llaves Devueltas Hoy (${returnedToday.length})
+                            </h5>`;
+
+            if (returnedToday.length === 0) {
+                html += `<p class="text-gray-500 text-sm italic">No se devolvieron llaves hoy.</p>`;
+            } else {
+                returnedToday.forEach(record => {
+                    const keyType = keyTypes.find(k => k.id === record.keyTypeId);
+                    if (keyType) {
+                        const time = new Date(record.returnDate).toLocaleTimeString('es-MX', { hour: '2-digit', minute: '2-digit' });
+                        html += `<div class="flex items-start gap-2 py-2 border-b border-gray-100 last:border-0">
+                            <i class="ph ${keyType.icon} text-xl text-emerald-600 mt-0.5"></i>
+                            <div class="flex-1">
+                                <p class="font-semibold text-gray-800">${keyType.name}</p>
+                                <p class="text-sm text-gray-600">👤 ${record.borrower} • ${time}</p>
+                            </div>
+                        </div>`;
+                    }
+                });
+            }
+
+            html += `</div>`;
+
+            // Only show lost section if there were any today
+            if (lostToday.length > 0) {
+                html += `<div class="bg-white p-4 rounded-xl border border-rose-200 shadow-sm">
+                            <h5 class="font-bold text-lg text-rose-700 mb-3 flex items-center gap-2">
+                                <i class="ph-fill ph-warning text-2xl"></i>
+                                Llaves Extraviadas Hoy (${lostToday.length})
+                            </h5>`;
+                
+                lostToday.forEach(record => {
+                    const keyType = keyTypes.find(k => k.id === record.keyTypeId);
+                    if (keyType) {
+                        html += `<div class="flex items-start gap-2 py-2 border-b border-gray-100 last:border-0">
+                            <i class="ph ${keyType.icon} text-xl text-rose-600 mt-0.5"></i>
+                            <div class="flex-1">
+                                <p class="font-semibold text-gray-800">${keyType.name}</p>
+                                <p class="text-sm text-gray-600">👤 ${record.borrower}</p>
+                            </div>
+                        </div>`;
+                    }
+                });
+                html += `</div>`;
+            }
+
+            html += `
+                        <!-- Llaves Actualmente Fuera -->
+                        <div class="bg-white p-4 rounded-xl border border-amber-200 shadow-sm">
+                            <h5 class="font-bold text-lg text-amber-700 mb-3 flex items-center gap-2">
+                                <i class="ph-fill ph-clock text-2xl"></i>
+                                Total de Llaves Fuera (${currentlyOut.length})
+                            </h5>`;
+
+            if (currentlyOut.length === 0) {
+                html += `<p class="text-gray-500 text-sm italic">Todas las llaves están en su lugar.</p>`;
+            } else {
+                currentlyOut.forEach(record => {
+                    const keyType = keyTypes.find(k => k.id === record.keyTypeId);
+                    if (keyType) {
+                        const days = calculateDays(record.checkoutDate);
+                        const daysText = days === 0 ? 'Hoy' : days === 1 ? '1 día' : `${days} días`;
+                        html += `<div class="flex items-start gap-2 py-2 border-b border-gray-100 last:border-0">
+                            <i class="ph ${keyType.icon} text-xl text-amber-600 mt-0.5"></i>
+                            <div class="flex-1">
+                                <p class="font-semibold text-gray-800">${keyType.name}</p>
+                                <p class="text-sm text-gray-600">👤 ${record.borrower} • 🕐 ${daysText}</p>
+                            </div>
+                        </div>`;
+                    }
+                });
+            }
+
+            html += `</div>
+                    </div>
+                </div>`;
+
+            container.innerHTML = html;
+            openModal('dailyReportModal');
+        }
+
+        async function downloadReportImage() {
+            const reportContent = document.getElementById('dailyReportContent');
+            try {
+                const canvas = await html2canvas(reportContent, {
+                    backgroundColor: '#ffffff',
+                    scale: 2,
+                    logging: false
+                });
+                const link = document.createElement('a');
+                const today = new Date().toISOString().split('T')[0];
+                link.download = `reporte-llaves-${today}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            } catch (error) {
+                console.error('Error generating image:', error);
+                showMessage('Error', 'No se pudo generar la imagen. Intenta de nuevo.');
+            }
+        }
+
         async function generateInsights() {
             const pendingLoans = records.filter(r => r.status === 'pending').map(r => {
                 const kt = keyTypes.find(k => k.id === r.keyTypeId);
@@ -1016,6 +1221,8 @@ Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen 
         window.confirmAction = confirmAction; window.promptDeleteKey = promptDeleteKey;
         window.confirmDeleteKey = confirmDeleteKey; window.suggestIconWithAI = suggestIconWithAI;
         window.generateInsights = generateInsights;
+        window.generateDailyReport = generateDailyReport;
+        window.downloadReportImage = downloadReportImage;
         window.openEditKeyModal = openEditKeyModal; window.saveEditedKey = saveEditedKey;
         window.handleEditImageUpload = handleEditImageUpload;
 
