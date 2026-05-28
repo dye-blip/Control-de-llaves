@@ -779,12 +779,16 @@
             const newId = 'k' + Date.now();
             const keyData = { name, total, icon: selectedIcon, images: [...uploadedImages] };
             if (useFirebase && auth.currentUser) {
-                try { await setDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', newId), keyData); }
+                try { 
+                    await setDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', newId), keyData);
+                    setTimeout(() => { renderAll(); }, 500);
+                }
                 catch (err) { console.error("Error saving key: ", err); }
             } else { keyTypes.push({ id: newId, ...keyData }); saveLocalData(); renderAll(); }
             document.getElementById('newKeyName').value = ''; document.getElementById('newKeyTotal').value = '';
             uploadedImages = []; document.getElementById('imagePreviewContainer').innerHTML = ''; document.getElementById('imagePreviewContainer').classList.add('hidden');
             closeModal('addKeyModal');
+            showMessage("Éxito", "La llave se guardó correctamente.");
         }
 
         function openLendModal() {
@@ -1137,12 +1141,25 @@ Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen 
 
         function handleEditImageUpload(event) {
             const files = event.target.files;
-            Array.from(files).forEach(file => {
-                if (!file.type.startsWith('image/')) return;
+            if (files.length === 0) return;
+            
+            let filesToProcess = Array.from(files).filter(file => file.type.startsWith('image/'));
+            let processedCount = 0;
+            
+            filesToProcess.forEach(file => {
                 const reader = new FileReader();
                 reader.onload = (e) => {
-                    editingKeyImages.push(e.target.result);
-                    displayEditImages();
+                    if (e.target.result) {
+                        editingKeyImages.push(e.target.result);
+                        processedCount++;
+                        if (processedCount === filesToProcess.length) {
+                            displayEditImages();
+                        }
+                    }
+                };
+                reader.onerror = () => {
+                    console.error("Error reading file:", file.name);
+                    processedCount++;
                 };
                 reader.readAsDataURL(file);
             });
@@ -1151,6 +1168,10 @@ Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen 
 
         function displayEditImages() {
             const container = document.getElementById('editCurrentImages');
+            if (!container) {
+                console.error("editCurrentImages container not found");
+                return;
+            }
             container.innerHTML = '';
             if (editingKeyImages.length === 0) {
                 container.classList.add('hidden');
@@ -1198,6 +1219,8 @@ Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen 
             if (useFirebase && auth.currentUser) {
                 try {
                     await updateDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', editingKeyId), keyData);
+                    // Wait a moment for the real-time listener to update
+                    setTimeout(() => { renderAll(); }, 500);
                 } catch (err) { console.error("Error updating key: ", err); }
             } else {
                 const idx = keyTypes.findIndex(k => k.id === editingKeyId);
@@ -1208,6 +1231,7 @@ Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen 
                 }
             }
             closeModal('editKeyModal');
+            showMessage("Éxito", "Los cambios se guardaron correctamente.");
             editingKeyId = null;
             editingKeyImages = [];
         }
