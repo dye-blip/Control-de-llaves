@@ -610,12 +610,12 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // Comprimir EXTREMADAMENTE - máximo 50KB por imagen
+                    // Comprimir EXTREMADAMENTE - máximo 40KB por imagen
                     let compressedBase64 = canvas.toDataURL('image/jpeg', 0.2);
                     let quality = 0.2;
                     
-                    // Reducir calidad hasta que sea menor a 50KB
-                    while (compressedBase64.length > 50000 && quality > 0.05) {
+                    // Reducir calidad hasta que sea menor a 40KB
+                    while (compressedBase64.length > 40000 && quality > 0.05) {
                         quality -= 0.02;
                         compressedBase64 = canvas.toDataURL('image/jpeg', quality);
                     }
@@ -828,7 +828,13 @@
             const total = parseInt(document.getElementById('newKeyTotal').value);
             if (!name || isNaN(total) || total <= 0) { showMessage("Faltan datos", "Por favor ingresa un nombre y una cantidad válida."); return; }
             const newId = 'k' + Date.now();
-            const keyData = { name, total, icon: selectedIcon, images: [...uploadedImages] };
+            // Limitar a máximo 15 imágenes
+            let imagesToSave = [...uploadedImages];
+            if (imagesToSave.length > 15) {
+                imagesToSave = imagesToSave.slice(0, 15);
+                showMessage("Límite alcanzado", "Se guardaron solo las primeras 15 imágenes. El sistema permite máximo 15 por llave.");
+            }
+            const keyData = { name, total, icon: selectedIcon, images: imagesToSave };
             if (useFirebase && auth.currentUser) {
                 try { 
                     await setDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', newId), keyData);
@@ -1267,7 +1273,13 @@ Genera un reporte ejecutivo en HTML básico (<b>,<ul>,<li>,<p>) con: 1) Resumen 
                 showMessage("Faltan datos", "Por favor ingresa un nombre y una cantidad válida.");
                 return;
             }
-            const keyData = { name, total, icon: editSelectedIcon, images: [...editingKeyImages] };
+            // Limitar a máximo 15 imágenes
+            let imagesToSave = [...editingKeyImages];
+            if (imagesToSave.length > 15) {
+                imagesToSave = imagesToSave.slice(0, 15);
+                showMessage("Límite alcanzado", "Se guardaron solo las primeras 15 imágenes. El sistema permite máximo 15 por llave.");
+            }
+            const keyData = { name, total, icon: editSelectedIcon, images: imagesToSave };
             if (useFirebase && auth.currentUser) {
                 try {
                     await updateDoc(doc(db, 'controlLlaves', 'datos', 'keyTypes', editingKeyId), keyData);
