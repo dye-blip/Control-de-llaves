@@ -582,7 +582,7 @@
             openModal('imageViewerModal');
         }
 
-        function compressImage(base64String, maxWidth = 600, maxHeight = 600, quality = 0.5) {
+        function compressImage(base64String) {
             return new Promise((resolve) => {
                 const img = new Image();
                 img.src = base64String;
@@ -591,15 +591,17 @@
                     let width = img.width;
                     let height = img.height;
                     
+                    // Redimensionar agresivamente a máximo 400x400
+                    const maxDim = 400;
                     if (width > height) {
-                        if (width > maxWidth) {
-                            height = (height * maxWidth) / width;
-                            width = maxWidth;
+                        if (width > maxDim) {
+                            height = (height * maxDim) / width;
+                            width = maxDim;
                         }
                     } else {
-                        if (height > maxHeight) {
-                            width = (width * maxHeight) / height;
-                            height = maxHeight;
+                        if (height > maxDim) {
+                            width = (width * maxDim) / height;
+                            height = maxDim;
                         }
                     }
                     
@@ -607,20 +609,21 @@
                     canvas.height = height;
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
-                    let compressedBase64 = canvas.toDataURL('image/jpeg', quality);
                     
-                    // Si aun es muy grande, comprimir más
-                    let attempts = 0;
-                    let currentQuality = quality;
-                    while (compressedBase64.length > 400000 && attempts < 5) {
-                        currentQuality -= 0.1;
-                        compressedBase64 = canvas.toDataURL('image/jpeg', currentQuality);
-                        attempts++;
+                    // Comprimir iterativamente hasta que sea pequeño
+                    let compressedBase64 = canvas.toDataURL('image/jpeg', 0.4);
+                    let quality = 0.4;
+                    
+                    while (compressedBase64.length > 200000 && quality > 0.1) {
+                        quality -= 0.05;
+                        compressedBase64 = canvas.toDataURL('image/jpeg', quality);
                     }
                     
+                    console.log('Imagen comprimida de', base64String.length, 'a', compressedBase64.length, 'bytes');
                     resolve(compressedBase64);
                 };
                 img.onerror = () => {
+                    console.error('Error al cargar imagen para comprimir');
                     resolve(base64String);
                 };
             });
