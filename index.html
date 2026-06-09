@@ -591,8 +591,8 @@
                     let width = img.width;
                     let height = img.height;
                     
-                    // Redimensionar agresivamente a máximo 400x400
-                    const maxDim = 400;
+                    // Redimensionar a máximo 300x300 para tamaño muy pequeño
+                    const maxDim = 300;
                     if (width > height) {
                         if (width > maxDim) {
                             height = (height * maxDim) / width;
@@ -610,16 +610,20 @@
                     const ctx = canvas.getContext('2d');
                     ctx.drawImage(img, 0, 0, width, height);
                     
-                    // Comprimir iterativamente hasta que sea pequeño
-                    let compressedBase64 = canvas.toDataURL('image/jpeg', 0.4);
-                    let quality = 0.4;
+                    // Comprimir EXTREMADAMENTE - máximo 50KB por imagen
+                    let compressedBase64 = canvas.toDataURL('image/jpeg', 0.2);
+                    let quality = 0.2;
                     
-                    while (compressedBase64.length > 200000 && quality > 0.1) {
-                        quality -= 0.05;
+                    // Reducir calidad hasta que sea menor a 50KB
+                    while (compressedBase64.length > 50000 && quality > 0.05) {
+                        quality -= 0.02;
                         compressedBase64 = canvas.toDataURL('image/jpeg', quality);
                     }
                     
-                    console.log('Imagen comprimida de', base64String.length, 'a', compressedBase64.length, 'bytes');
+                    const originalSize = base64String.length;
+                    const compressedSize = compressedBase64.length;
+                    const percentage = Math.round((compressedSize / originalSize) * 100);
+                    console.log(`📸 Imagen: ${(originalSize/1024).toFixed(2)}KB → ${(compressedSize/1024).toFixed(2)}KB (${percentage}%)`);
                     resolve(compressedBase64);
                 };
                 img.onerror = () => {
